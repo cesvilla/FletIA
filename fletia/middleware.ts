@@ -9,7 +9,7 @@ export async function middleware(request: NextRequest) {
   if (!supabaseUrl || !supabaseKey) return NextResponse.next();
 
   const pathname = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some(p => pathname === p) || pathname.startsWith('/_next') || pathname.startsWith('/api');
+  const isPublic = PUBLIC_PATHS.some(p => pathname === p || pathname === p + "/") || pathname.startsWith('/_next') || pathname.startsWith('/api');
 
   let supabaseResponse = NextResponse.next({ request });
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
