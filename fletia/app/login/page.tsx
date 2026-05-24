@@ -12,7 +12,9 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
 
-  const [modo, setModo] = useState<'login' | 'registro'>('login');
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const modoInicial = searchParams?.get('modo') === 'registro' ? 'registro' : 'login';
+  const [modo, setModo] = useState<'login' | 'registro'>(modoInicial as 'login' | 'registro');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [empresa, setEmpresa] = useState('');
