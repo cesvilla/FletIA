@@ -30,7 +30,7 @@ export default function LandingPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        
         :root{--bg:#0a0a0a;--bg-2:#111111;--ink:#ffffff;--ink-2:#a0a0a0;--ink-3:#6b6b6b;--line:rgba(255,255,255,0.08);--line-strong:rgba(255,255,255,0.18);--cyan:#ff7a4d;--cyan-2:#ff6638;--cyan-deep:#d44a22;--amber:#ff7a4d;--amber-2:#ff6638;--argentina:#6ec6ff;--good:#34d399;--card:rgba(20,20,20,0.65);--card-bd:rgba(255,255,255,0.10)}
         *{box-sizing:border-box}
         html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
