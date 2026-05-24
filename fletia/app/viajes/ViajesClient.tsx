@@ -514,7 +514,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         </div>
                       </div>
                     </div>
-                    {!v.litros_reales && (
+                    {(v.litros_reales === null || v.litros_reales === undefined) && (
                       <LitrosRealesForm viajeId={v.id} onAprendido={(msg) => alert(msg)} />
                     )}
                   </div>
