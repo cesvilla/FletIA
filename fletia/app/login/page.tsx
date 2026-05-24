@@ -20,8 +20,8 @@ export default function LoginPage() {
   const [empresa, setEmpresa] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState <string | null>(null);
-  const [mensaje, setMensaje] = useState const pendiente = typeof window !== 'undefined' && window.location.search.includes('pendiente=1'); <string | null>(null);
-const pendiente = typeof window !== 'undefined' && window.location.search.includes('pendiente=1');
+  const [mensaje, setMensaje] = useState<string | null>(null);
+  const pendiente = typeof window !== 'undefined' && window.location.search.includes('pendiente=1');
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
