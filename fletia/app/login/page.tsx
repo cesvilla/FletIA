@@ -21,7 +21,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState <string | null>(null);
   const [mensaje, setMensaje] = useState const pendiente = typeof window !== 'undefined' && window.location.search.includes('pendiente=1'); <string | null>(null);
-
+const pendiente = typeof window !== 'undefined' && window.location.search.includes('pendiente=1');
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -78,6 +78,11 @@ export default function LoginPage() {
           <div className="font-display text-5xl font-black tracking-tight text-ink">
             Flet<span className="text-accent">IA</span>
           </div>
+          {pendiente && (
+  <div className="bg-yellow-50 border border-yellow-300 text-yellow-800 text-xs font-mono px-3 py-2.5 mb-4">
+    ⏳ Confirmá tu email antes de ingresar. Revisá tu bandeja de entrada.
+  </div>
+)}
           <div className="font-mono text-[10px] tracking-[3px] text-ink-3 mt-1 uppercase">
             // combustible inteligente
           </div>
