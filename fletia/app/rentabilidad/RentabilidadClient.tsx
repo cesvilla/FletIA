@@ -133,7 +133,7 @@ export default function RentabilidadClient({ viajes, empresa, email }: Props) {
                   <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: '#8a8278' }}>VIAJES RENTABLES</div>
                 </div>
                 <div className="bg-white border border-gray-200 p-5 text-center">
-                  <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '48px', fontWeight: 900, color: '#d4440c' }}>{viajesNegotivos}</div>
+                  <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '48px', fontWeight: 900, color: '#d4440c' }}>{viajesNegativos}</div>
                   <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: '#8a8278' }}>VIAJES EN ROJO</div>
                 </div>
               </div>
