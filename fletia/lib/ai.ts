@@ -1,4 +1,3 @@
-cat > ./fletia/lib/ai.ts << 'EOF'
 export interface ParametrosViaje {
   consumoBase: number;
   capacidadMax: number;
@@ -72,11 +71,6 @@ export function calcularViaje(params: ParametrosViaje): ResultadoCalculo {
   };
 }
 
-/**
- * Aprende del consumo real: ajusta consumo_base del camión
- * usando promedio ponderado entre el valor actual y el real medido.
- * Peso 80% histórico, 20% nuevo dato → cambio gradual, no brusco.
- */
 export function calcularNuevoConsumoBase(
   consumoBaseActual: number,
   litrosReales: number,
@@ -86,16 +80,8 @@ export function calcularNuevoConsumoBase(
   factorTerreno: number,
   factorCondicion: number
 ): number {
-  // Consumo real medido (lts/100km)
   const consumoRealMedido = (litrosReales / kilometros) * 100;
-
-  // Revertir factores para obtener consumo base implícito
   const consumoBaseImplicito = consumoRealMedido / (factorPeso * factorRuta * factorTerreno * factorCondicion);
-
-  // Promedio ponderado: 80% historial, 20% nuevo dato
   const nuevoConsumoBase = (consumoBaseActual * 0.8) + (consumoBaseImplicito * 0.2);
-
-  // Clamp: no salir de rango razonable (15-60 lts/100km)
   return Math.round(Math.min(Math.max(nuevoConsumoBase, 15), 60) * 10) / 10;
 }
-EOF
