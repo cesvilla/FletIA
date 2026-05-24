@@ -25,6 +25,7 @@ interface Viaje {
   costo_por_km: number;
   porcentaje_carga: number;
   flete_cobrado: number | null;
+  litros_reales: number | null;
   created_at: string;
   camiones: { patente: string; marca: string; modelo: string } | null;
 }
@@ -486,39 +487,96 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
             </div>
           )}
 
-          {/* Historial de viajes */}
-          {viajes.length > 0 && (
+         {viajes.length > 0 && (
             <div className="mt-6 bg-white border border-gray-200">
               <div className="px-6 py-4" style={{ borderBottom: '1px solid rgba(26,23,20,0.1)' }}>
                 <div className="text-sm font-bold">📋 Últimos viajes calculados</div>
               </div>
               <div>
                 {viajes.map((v, i) => (
-                  <div key={v.id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors" style={{ borderBottom: i < viajes.length - 1 ? '1px solid rgba(26,23,20,0.08)' : 'none' }}>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold">
-                        {v.origen && v.destino ? `${v.origen} → ${v.destino}` : `${v.kilometros} km`}
+                  <div key={v.id} className="border-b last:border-b-0" style={{ borderColor: 'rgba(26,23,20,0.08)' }}>
+                    <div className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold">
+                          {v.origen && v.destino ? `${v.origen} → ${v.destino}` : `${v.kilometros} km`}
+                        </div>
+                        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', marginTop: '2px' }}>
+                          {v.camiones?.patente} · {v.peso_carga} ton · estimado: {v.litros_totales} lts
+                          {v.litros_reales && <span style={{ color: '#1a6b3a' }}> · real: {v.litros_reales} lts ✓</span>}
+                        </div>
                       </div>
-                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', marginTop: '2px' }}>
-                        {v.camiones?.patente} · {v.peso_carga} ton · {v.litros_totales} lts
+                      <div className="text-right flex-shrink-0">
+                        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '18px', fontWeight: 700 }}>
+                          ${v.costo_total.toLocaleString('es-AR')}
+                        </div>
+                        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>
+                          ${v.costo_por_km}/km
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right flex-shrink-0">
-                      <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '18px', fontWeight: 700 }}>
-                        ${v.costo_total.toLocaleString('es-AR')}
-                      </div>
-                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>
-                        ${v.costo_por_km}/km
-                      </div>
-                    </div>
+                    {!v.litros_reales && (
+                      <LitrosRealesForm viajeId={v.id} onAprendido={(msg) => alert(msg)} />
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           )}
-
         </div>
       </main>
     </div>
+  );
+}
+
+function LitrosRealesForm({ viajeId, onAprendido }: { viajeId: string; onAprendido: (msg: string) => void }) {
+  const [litros, setLitros] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!litros || parseFloat(litros) <= 0) return;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/viajes/aprender', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ viaje_id: viajeId, litros_reales: parseFloat(litros) }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDone(true);
+        onAprendido(data.mensaje);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (done) return null;
+
+  return (
+    <form onSubmit={handleSubmit} className="flex items-center gap-2 px-6 pb-4">
+      <input
+        type="number"
+        value={litros}
+        onChange={e => setLitros(e.target.value)}
+        placeholder="Litros reales cargados"
+        step="0.1" min="1"
+        className="px-3 py-1.5 text-xs outline-none flex-1 max-w-[180px]"
+        style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
+      />
+      <button
+        type="submit"
+        disabled={loading || !litros}
+        className="px-3 py-1.5 text-xs text-white font-bold disabled:opacity-50"
+        style={{ backgroundColor: '#1a6b3a' }}
+      >
+        {loading ? '...' : '🧠 Enseñar IA'}
+      </button>
+      <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>
+        ¿Cuánto cargaste realmente?
+      </span>
+    </form>
   );
 }
