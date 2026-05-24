@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const resultado = calcularViaje({
       consumoBase: camion.consumo_base_litros,
       capacidadMax: camion.capacidad_max_ton,
-      pesoCarга: body.peso_carga,
+      pesoCarga: body.peso_carga,
       kilometros: body.kilometros,
       tipoRuta: body.tipo_ruta || 'mixta',
       terreno: body.terreno || 'plano',

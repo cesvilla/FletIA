@@ -1,7 +1,8 @@
+cat > ./fletia/lib/ai.ts << 'EOF'
 export interface ParametrosViaje {
   consumoBase: number;
   capacidadMax: number;
-  pesoCarга: number;
+  pesoCarga: number;
   kilometros: number;
   tipoRuta: 'autopista' | 'mixta' | 'urbana';
   terreno: 'plano' | 'ondulado' | 'montanoso';
@@ -41,9 +42,9 @@ const FACTORES_CONDICION: Record<string, number> = {
 };
 
 export function calcularViaje(params: ParametrosViaje): ResultadoCalculo {
-  const { consumoBase, capacidadMax, pesoCarга, kilometros, tipoRuta, terreno, precioCombustible, condicionCamion } = params;
+  const { consumoBase, capacidadMax, pesoCarga, kilometros, tipoRuta, terreno, precioCombustible, condicionCamion } = params;
 
-  const porcentajeCarga = Math.min(pesoCarга / capacidadMax, 1);
+  const porcentajeCarga = Math.min(pesoCarga / capacidadMax, 1);
   const factorPeso = 1 + (porcentajeCarga * 0.35);
   const factorRuta = FACTORES_RUTA[tipoRuta] || 1.0;
   const factorTerreno = FACTORES_TERRENO[terreno] || 1.0;
@@ -55,7 +56,7 @@ export function calcularViaje(params: ParametrosViaje): ResultadoCalculo {
   const costoPorKm = costoTotal / kilometros;
 
   const incrementoPeso = Math.round((factorPeso - 1) * 100);
-  const descripcion = `Con ${pesoCarга} ton de carga (${Math.round(porcentajeCarga * 100)}% de capacidad), el consumo aumenta un ${incrementoPeso}% respecto al viaje vacío. Consumo estimado: ${consumoReal.toFixed(1)} lts/100km · Total: ${litrosTotales.toFixed(1)} litros.`;
+  const descripcion = `Con ${pesoCarga} ton de carga (${Math.round(porcentajeCarga * 100)}% de capacidad), el consumo aumenta un ${incrementoPeso}% respecto al viaje vacío. Consumo estimado: ${consumoReal.toFixed(1)} lts/100km · Total: ${litrosTotales.toFixed(1)} litros.`;
 
   return {
     factorPeso: Math.round(factorPeso * 100) / 100,
@@ -70,3 +71,31 @@ export function calcularViaje(params: ParametrosViaje): ResultadoCalculo {
     descripcion,
   };
 }
+
+/**
+ * Aprende del consumo real: ajusta consumo_base del camión
+ * usando promedio ponderado entre el valor actual y el real medido.
+ * Peso 80% histórico, 20% nuevo dato → cambio gradual, no brusco.
+ */
+export function calcularNuevoConsumoBase(
+  consumoBaseActual: number,
+  litrosReales: number,
+  kilometros: number,
+  factorPeso: number,
+  factorRuta: number,
+  factorTerreno: number,
+  factorCondicion: number
+): number {
+  // Consumo real medido (lts/100km)
+  const consumoRealMedido = (litrosReales / kilometros) * 100;
+
+  // Revertir factores para obtener consumo base implícito
+  const consumoBaseImplicito = consumoRealMedido / (factorPeso * factorRuta * factorTerreno * factorCondicion);
+
+  // Promedio ponderado: 80% historial, 20% nuevo dato
+  const nuevoConsumoBase = (consumoBaseActual * 0.8) + (consumoBaseImplicito * 0.2);
+
+  // Clamp: no salir de rango razonable (15-60 lts/100km)
+  return Math.round(Math.min(Math.max(nuevoConsumoBase, 15), 60) * 10) / 10;
+}
+EOF
