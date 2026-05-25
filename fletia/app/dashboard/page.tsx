@@ -22,7 +22,7 @@ export default async function DashboardPage() {
     supabase.from('viajes').select('id').eq('user_id', user.id),
     supabase.from('camiones').select('id').eq('user_id', user.id).eq('activo', true),
     supabase.from('recordatorios').select('*').eq('user_id', user.id).eq('completado', false).order('fecha', { ascending: true }),
-    supabase.from('precio_combustible').select('*').eq('fecha', now.toISOString().split('T')[0]).order('empresa'),
+    supabase.from('precio_combustible').select('*').order('fecha', {ascending: false}).order('empresa').limit(16),
   ]);
 
   const gastoMes = viajesMes?.reduce((acc, v) => acc + (v.costo_total || 0), 0) || 0;
