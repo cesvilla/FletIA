@@ -49,6 +49,7 @@ export default function DashboardClient({ email, empresa, userId, gastoMes, tota
     { label: 'Precio gasoil hoy', value: precios.length > 0 ? `$${precios[0].precio.toLocaleString('es-AR')}` : '—', sub: precios.length > 0 ? `YPF · ${new Date().toLocaleDateString('es-AR')}` : 'Actualizando...' },
   ];
 
+  console.log("PRECIOS:", JSON.stringify(precios));
   const preciosPorEmpresa = precios.reduce((acc: Record<string, Precio[]>, p) => {
     if (!acc[p.empresa]) acc[p.empresa] = [];
     acc[p.empresa].push(p);
