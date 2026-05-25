@@ -3,6 +3,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import dynamic from 'next/dynamic';
+
+const MapaRuta = dynamic(() => import('./MapaRuta'), { ssr: false, loading: () => (
+  <div style={{ height: 300, backgroundColor: '#e8e3db', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', color: '#8a8278' }}>Cargando mapa...</span>
+  </div>
+) });
 
 interface Camion {
   id: string;
@@ -57,6 +64,14 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingKm, setLoadingKm] = useState(false);
+  const [errorKm, setErrorKm] = useState<string | null>(null);
+  const [mapaData, setMapaData] = useState<{
+    polyline: [number, number][];
+    origen: { lat: number; lon: number; nombre: string };
+    destino: { lat: number; lon: number; nombre: string };
+    km: number;
+  } | null>(null);
   const [resultado, setResultado] = useState<ResultadoIA | null>(null);
   const [camionInfo, setCamionInfo] = useState<{ patente: string; marca: string; modelo: string } | null>(null);
 
@@ -81,6 +96,28 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     await supabase.auth.signOut();
     router.push('/login');
     router.refresh();
+  }
+
+  async function handleCalcularKm() {
+    if (!form.origen.trim() || !form.destino.trim()) return;
+    setErrorKm(null);
+    setMapaData(null);
+    setLoadingKm(true);
+    try {
+      const res = await fetch('/api/distancia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origen: form.origen, destino: form.destino }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al calcular distancia');
+      setForm(p => ({ ...p, kilometros: String(data.km) }));
+      setMapaData({ polyline: data.polyline, origen: data.origen, destino: data.destino, km: data.km });
+    } catch (err: any) {
+      setErrorKm(err.message);
+    } finally {
+      setLoadingKm(false);
+    }
   }
 
   async function handleCalcular(e: React.FormEvent) {
@@ -164,7 +201,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
             <span>🚛</span> Mis camiones
           </a>
           <div className="px-5 my-4 text-white/25 uppercase" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', letterSpacing: '2px' }}>Análisis</div>
-          <a className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
+          <a href="/rentabilidad" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
             <span>💰</span> Rentabilidad
           </a>
         </nav>
@@ -280,6 +317,51 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         />
                       </div>
                     </div>
+
+                    {/* Botón calcular distancia */}
+                    {form.origen.trim() && form.destino.trim() && (
+                      <div>
+                        <button
+                          type="button"
+                          onClick={handleCalcularKm}
+                          disabled={loadingKm}
+                          className="w-full py-2 text-xs font-bold transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+                          style={{ backgroundColor: 'rgba(26,107,58,0.1)', border: '1px solid rgba(26,107,58,0.3)', color: '#1a6b3a' }}
+                        >
+                          {loadingKm ? '📍 Calculando ruta...' : '📍 Calcular kilómetros automáticamente'}
+                        </button>
+                        {errorKm && (
+                          <div className="mt-1.5 px-3 py-2 text-xs" style={{ fontFamily: 'DM Mono, monospace', backgroundColor: 'rgba(212,68,12,0.08)', border: '1px solid rgba(212,68,12,0.25)', color: '#d4440c' }}>
+                            ⚠ {errorKm}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Mapa de ruta */}
+                    {mapaData && (
+                      <div style={{ border: '1px solid rgba(26,23,20,0.15)', overflow: 'hidden' }}>
+                        <div className="px-3 py-2 flex items-center justify-between" style={{ backgroundColor: '#1a1714' }}>
+                          <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '2px', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>
+                            🗺️ Ruta vial — {mapaData.origen.nombre.split(',')[0]} → {mapaData.destino.nombre.split(',')[0]}
+                          </span>
+                          <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: '#d4440c', fontWeight: 700 }}>
+                            {mapaData.km} km
+                          </span>
+                        </div>
+                        <MapaRuta
+                          polyline={mapaData.polyline}
+                          origen={mapaData.origen}
+                          destino={mapaData.destino}
+                          km={mapaData.km}
+                        />
+                        <div className="px-3 py-2.5" style={{ backgroundColor: '#fff8e7', borderTop: '2px solid #c8860a' }}>
+                          <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', color: '#7a5000', fontWeight: 600 }}>
+                            ⚠ Distancia estimada por ruta vial. Puede variar según el recorrido real del chofer.
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Km y Peso */}
                     <div className="grid grid-cols-2 gap-3">

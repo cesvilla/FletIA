@@ -24,7 +24,7 @@ export default async function DashboardPage() {
     supabase.from('recordatorios').select('*').eq('user_id', user.id).eq('completado', false).order('fecha', { ascending: true }),
     supabase.from('precio_combustible').select('*').order('fecha', { ascending: false }).order('empresa').limit(16),
   ]);
-console.log('PRECIOS SERVER:', precios, precios?.length);
+
   const gastoMes = viajesMes?.reduce((acc, v) => acc + (v.costo_total || 0), 0) || 0;
   const totalViajes = viajesTotal?.length || 0;
   const totalCamiones = camiones?.length || 0;

@@ -54,6 +54,7 @@ export async function POST(request: Request) {
         factor_peso: resultado.factorPeso,
         factor_ruta: resultado.factorRuta,
         factor_terreno: resultado.factorTerreno,
+        factor_condicion: resultado.factorCondicion,
         consumo_real: resultado.consumoReal,
         litros_totales: resultado.litrosTotales,
         costo_total: resultado.costoTotal,

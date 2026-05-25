@@ -143,7 +143,7 @@ export default function CamionesClient({ camionesIniciales, empresa, email }: Pr
           <a href="/dashboard" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
             <span>⚡</span> Dashboard
           </a>
-          <a className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
+          <a href="/viajes" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
             <span>🧮</span> Nuevo viaje
           </a>
           <div className="px-5 my-4 text-white/25 uppercase" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', letterSpacing: '2px' }}>Flota</div>
@@ -325,7 +325,7 @@ export default function CamionesClient({ camionesIniciales, empresa, email }: Pr
                   </div>
                   <div>
                     <label className="block mb-1" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '1px', color: '#8a8278', textTransform: 'uppercase' }}>Año *</label>
-                    <input type="number" value={form.anio} onChange={e => setForm(p => ({ ...p, anio: parseInt(e.target.value) }))} min={1990} max={2025} required
+                    <input type="number" value={form.anio} onChange={e => setForm(p => ({ ...p, anio: parseInt(e.target.value) }))} min={1990} max={new Date().getFullYear() + 1} required
                       className="w-full px-3 py-2.5 text-sm font-medium outline-none"
                       style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
                     />
