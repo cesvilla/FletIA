@@ -7,6 +7,7 @@ import DashboardClient from './DashboardClient';
  * Verifica que el usuario esté logueado.
  * Si no, lo redirige al login.
  */
+// updated
 export default async function DashboardPage() {
   const supabase = createClient();
 
