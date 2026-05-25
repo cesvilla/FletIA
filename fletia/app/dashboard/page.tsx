@@ -6,7 +6,6 @@ import DashboardClient from './DashboardClient';
 export default async function DashboardPage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
 
   const empresa = user.user_metadata?.empresa || 'Tu empresa';
   const now = new Date();
@@ -17,14 +16,14 @@ export default async function DashboardPage() {
     { data: viajesTotal },
     { data: camiones },
     { data: recordatorios },
-    { data: precios = [] },
   ] = await Promise.all([
     supabase.from('viajes').select('costo_total').eq('user_id', user.id).gte('created_at', firstOfMonth),
     supabase.from('viajes').select('id').eq('user_id', user.id),
     supabase.from('camiones').select('id').eq('user_id', user.id).eq('activo', true),
     supabase.from('recordatorios').select('*').eq('user_id', user.id).eq('completado', false).order('fecha', { ascending: true }),
-    undefined,
   ]);
+
+  const { data: precios } = await adminClient.from('precio_combustible').select('*').order('fecha', { ascending: false }).order('empresa').limit(16);
 
   const gastoMes = viajesMes?.reduce((acc, v) => acc + (v.costo_total || 0), 0) || 0;
   const totalViajes = viajesTotal?.length || 0;
@@ -32,7 +31,6 @@ export default async function DashboardPage() {
 
   return (
     <DashboardClient
-      email={user.email!}
       empresa={empresa}
       userId={user.id}
       gastoMes={gastoMes}
