@@ -17,7 +17,7 @@ export default async function DashboardPage() {
     { data: viajesTotal },
     { data: camiones },
     { data: recordatorios },
-    { data: precios },
+    { data: precios = [] },
   ] = await Promise.all([
     supabase.from('viajes').select('costo_total').eq('user_id', user.id).gte('created_at', firstOfMonth),
     supabase.from('viajes').select('id').eq('user_id', user.id),
