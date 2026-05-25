@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { createClient as createAdminClient } from '@supabase/supabase-js';
 import DashboardClient from './DashboardClient';
 
 export default async function DashboardPage() {
@@ -17,23 +16,14 @@ export default async function DashboardPage() {
     { data: viajesTotal },
     { data: camiones },
     { data: recordatorios },
+    { data: precios },
   ] = await Promise.all([
     supabase.from('viajes').select('costo_total').eq('user_id', user.id).gte('created_at', firstOfMonth),
     supabase.from('viajes').select('id').eq('user_id', user.id),
     supabase.from('camiones').select('id').eq('user_id', user.id).eq('activo', true),
     supabase.from('recordatorios').select('*').eq('user_id', user.id).eq('completado', false).order('fecha', { ascending: true }),
+    supabase.from('precio_combustible').select('*').order('fecha', { ascending: false }).order('empresa').limit(16),
   ]);
-
-  const adminClient = createAdminClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
-  );
-  const { data: precios } = await adminClient
-    .from('precio_combustible')
-    .select('*')
-    .order('fecha', { ascending: false })
-    .order('empresa')
-    .limit(16);
 
   const gastoMes = viajesMes?.reduce((acc, v) => acc + (v.costo_total || 0), 0) || 0;
   const totalViajes = viajesTotal?.length || 0;
