@@ -6,7 +6,8 @@ import DashboardClient from './DashboardClient';
 export default async function DashboardPage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
-if (!user) { redirect('/login'); return null; }
+  if (!user) { redirect('/login'); return null; }
+
   const empresa = user.user_metadata?.empresa || 'Tu empresa';
   const now = new Date();
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
@@ -23,7 +24,16 @@ if (!user) { redirect('/login'); return null; }
     supabase.from('recordatorios').select('*').eq('user_id', user.id).eq('completado', false).order('fecha', { ascending: true }),
   ]);
 
-  const { data: precios } = await adminClient.from('precio_combustible').select('*').order('fecha', { ascending: false }).order('empresa').limit(16);
+  const adminClient = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
+  );
+  const { data: precios } = await adminClient
+    .from('precio_combustible')
+    .select('*')
+    .order('fecha', { ascending: false })
+    .order('empresa')
+    .limit(16);
 
   const gastoMes = viajesMes?.reduce((acc, v) => acc + (v.costo_total || 0), 0) || 0;
   const totalViajes = viajesTotal?.length || 0;
@@ -31,6 +41,7 @@ if (!user) { redirect('/login'); return null; }
 
   return (
     <DashboardClient
+      email={user.email!}
       empresa={empresa}
       userId={user.id}
       gastoMes={gastoMes}
