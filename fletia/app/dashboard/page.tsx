@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 import DashboardClient from './DashboardClient';
 
 export default async function DashboardPage() {
@@ -22,7 +23,7 @@ export default async function DashboardPage() {
     supabase.from('viajes').select('id').eq('user_id', user.id),
     supabase.from('camiones').select('id').eq('user_id', user.id).eq('activo', true),
     supabase.from('recordatorios').select('*').eq('user_id', user.id).eq('completado', false).order('fecha', { ascending: true }),
-    supabase.from('precio_combustible').select('*').order('fecha', {ascending: false}).order('empresa').limit(16),
+    undefined,
   ]);
 
   const gastoMes = viajesMes?.reduce((acc, v) => acc + (v.costo_total || 0), 0) || 0;
