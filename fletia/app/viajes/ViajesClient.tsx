@@ -1063,9 +1063,10 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
               fontFamily: 'DM Mono, monospace',
               fontSize: '13px',
               color: '#e0e0e0',
-              lineHeight: 1.6,
+              lineHeight: 1.9,
               margin: '0 0 28px',
               letterSpacing: '0.01em',
+              whiteSpace: 'pre-line',
             }}>
               {modalIA}
             </p>

@@ -61,8 +61,8 @@ export async function POST(request: Request) {
       diferencia: Math.round(diferencia * 10) / 10,
       aprendio,
       mensaje: aprendio
-        ? `Actualizar litros ${consumoBaseActual} → ${nuevoConsumoBase} lts/100km`
-        : 'El consumo real coincide con la estimación. ¡Excelente calibración!',
+        ? `Litros reales cargados: ${litros_reales} lts\nEstimado original: ${Math.round(viaje.litros_totales * 10) / 10} lts`
+        : `Litros reales cargados: ${litros_reales} lts\nEstimado original: ${Math.round(viaje.litros_totales * 10) / 10} lts\n¡Estimación perfecta!`,
     });
 
   } catch (error: any) {
