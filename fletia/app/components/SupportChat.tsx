@@ -11,14 +11,59 @@ interface Msg {
 }
 
 const MENU =
-  '¿En qué puedo ayudarte? Escribí el número:\n\n1️⃣  Calculadora de viajes\n2️⃣  Mis camiones\n3️⃣  Dashboard y reportes\n4️⃣  Planes y precios\n5️⃣  Hablar con una persona';
+  '¿En qué puedo ayudarte? Escribí el número:\n\n' +
+  '1️⃣  Calculadora de viajes\n' +
+  '2️⃣  Mis camiones\n' +
+  '3️⃣  Dashboard y reportes\n' +
+  '4️⃣  Cómo funciona la IA\n' +
+  '5️⃣  ¿Qué tan preciso es el cálculo?\n' +
+  '6️⃣  Planes y precios\n' +
+  '7️⃣  Hablar con una persona';
 
 const RESPONSES: Record<string, string> = {
-  '1': '🧮 *Calculadora de viajes*\n\nAndá al menú lateral → Calculadora. Ingresá origen, destino, peso y tipo de ruta. La IA calcula combustible, costo total y kilómetros automáticamente. ¿Necesitás más ayuda?',
-  '2': '🚛 *Mis camiones*\n\nDesde el menú lateral → Mis camiones podés agregar, editar y ver el consumo de cada camión de tu flota. ¿Tenés algún problema en particular?',
-  '3': '📊 *Dashboard y reportes*\n\nEl Dashboard muestra gastos, ganancias, viajes y camiones del mes en tiempo real. El Historial guarda todos los viajes con detalle. ¿Algo más?',
-  '4': '💰 *Planes y precios*\n\nFletIA está en fase de lanzamiento con acceso libre. Para consultas sobre planes empresariales escribinos a hola@flet-ia.com 😊',
-  '5': 'WHATSAPP',
+  '1': '🧮 *Calculadora de viajes*\n\nAndá al menú lateral → Calculadora. Ingresá origen, destino, peso y tipo de ruta. La IA calcula combustible, costo total y kilómetros automáticamente.\n\n¿Necesitás más ayuda?',
+
+  '2': '🚛 *Mis camiones*\n\nDesde el menú lateral → Mis camiones podés agregar, editar y ver el consumo real de cada camión de tu flota.\n\nCada camión tiene su propio perfil de consumo que la IA va ajustando con el tiempo. ¿Tenés algún problema en particular?',
+
+  '3': '📊 *Dashboard y reportes*\n\nEl Dashboard muestra gastos, ganancias, viajes y camiones del mes en tiempo real. El Historial guarda todos los viajes con detalle completo.\n\n¿Algo más?',
+
+  '4':
+    '🤖 *Cómo funciona la IA de FletIA*\n\n' +
+    'La IA calcula el costo real de combustible usando estos datos:\n\n' +
+    '📌 *Datos del camión:*\n' +
+    '• Consumo base del modelo (lts/100km en vacío)\n' +
+    '• Capacidad máxima de carga (toneladas)\n' +
+    '• Condición del vehículo (excelente/buena/regular)\n\n' +
+    '📌 *Datos del viaje:*\n' +
+    '• Peso de la carga\n' +
+    '• Kilómetros recorridos\n' +
+    '• Tipo de ruta (autopista/mixta/urbana)\n' +
+    '• Tipo de terreno (plano/ondulado/montañoso)\n\n' +
+    '⚙️ *Cómo evalúa cada factor:*\n' +
+    '• Carga al 100% → +25% de consumo\n' +
+    '• Ruta mixta → +12% | Urbana → +28%\n' +
+    '• Terreno ondulado → +7% | Montañoso → +18%\n' +
+    '• Condición buena → +3% | Regular → +8%\n\n' +
+    'Todos los factores se *suman* (no se multiplican) para evitar sobreestimaciones.\n\n' +
+    '¿Querés saber qué tan preciso es? Escribí 5️⃣',
+
+  '5':
+    '🎯 *Precisión del cálculo*\n\n' +
+    'La precisión depende de cuántos viajes reales hayas cargado en el sistema:\n\n' +
+    '🟡 *Al inicio (sin datos reales):*\n' +
+    'Precisión estimada: ±10 a 15%\n' +
+    'Usa datos técnicos del fabricante como punto de partida.\n\n' +
+    '🟢 *Con datos reales cargados (función "Enseñar IA"):*\n' +
+    'Precisión estimada: ±3 a 7%\n' +
+    'Cada vez que cargás los litros reales de un viaje, la IA actualiza el consumo base del camión con una ponderación 70/30 (historial vs dato nuevo).\n\n' +
+    '📌 *Ejemplo real:*\n' +
+    'Si el camión tenía consumo base de 27 lts/100km y mediste 29 lts/100km reales, la IA ajusta a ~27.6 lts/100km para el próximo cálculo.\n\n' +
+    '💡 *Consejo:* cuantos más viajes enseñes, más precisa se vuelve la IA para tu camión específico y tus rutas habituales.',
+
+  '6': '💰 *Planes y precios*\n\nFletIA está en fase de lanzamiento con acceso libre. Para consultas sobre planes empresariales escribinos a hola@flet-ia.com 😊',
+
+  '7': 'WHATSAPP',
+  // Keywords generales
   'calculadora': '🧮 La Calculadora está en el menú lateral. Ingresá origen, destino, peso y ruta para obtener el costo exacto. ¿Necesitás ayuda con algo específico?',
   'camion': '🚛 Gestioná tu flota desde "Mis camiones" en el menú. ¿Tenés algún problema con un camión en particular?',
   'camiones': '🚛 Gestioná tu flota desde "Mis camiones" en el menú. ¿Tenés algún problema con un camión en particular?',
@@ -30,6 +75,20 @@ const RESPONSES: Record<string, string> = {
   'gracias': '😊 ¡De nada! Estamos para ayudarte. Si tenés otra consulta, escribinos cuando quieras.',
   'hola': '👋 ¡Hola! ¿En qué puedo ayudarte?\n\n' + MENU,
   'buenas': '👋 ¡Hola! ¿En qué puedo ayudarte?\n\n' + MENU,
+
+  // Keywords sobre la IA
+  'ia': '🤖 Escribí *4* para ver cómo funciona la IA de FletIA, o *5* para saber qué tan preciso es el cálculo.',
+  'inteligencia': '🤖 Escribí *4* para ver cómo funciona la IA de FletIA, o *5* para saber qué tan preciso es el cálculo.',
+  'como funciona': '🤖 Escribí *4* para ver cómo funciona la IA de FletIA en detalle.',
+  'precis': '🎯 Escribí *5* para ver la precisión del cálculo según la cantidad de datos cargados.',
+  'exacto': '🎯 Escribí *5* para ver qué tan exacto es el cálculo según tus datos.',
+  'exactitud': '🎯 Escribí *5* para ver la precisión del cálculo según la cantidad de datos cargados.',
+  'aprend': '🧠 La IA aprende cada vez que cargás los litros reales de un viaje usando la función "Enseñar IA". Escribí *4* para saber más sobre cómo funciona.',
+  'enseñar': '🧠 Con "Enseñar IA" le indicás al sistema cuántos litros consumió realmente el camión. La IA ajusta su estimación con una ponderación 70/30 para los próximos cálculos. Escribí *5* para ver la precisión esperada.',
+  'consumo': '⛽ El consumo base de cada camión es el punto de partida del cálculo. La IA lo va ajustando con los datos reales que vos cargás. Escribí *4* para ver todos los factores que influyen.',
+  'factor': '⚙️ Los factores que usa la IA son: peso de carga, tipo de ruta, terreno y condición del camión. Todos se suman (no multiplican) para mayor precisión. Escribí *4* para ver el detalle.',
+  'kilometros': '📍 Los kilómetros se pueden calcular automáticamente ingresando origen y destino, o podés cargarlos manualmente si ya los conocés.',
+  'costo': '💰 El costo total se calcula: litros estimados × precio del gasoil. Escribí *1* para ir a la Calculadora o *4* para ver cómo se estiman los litros.',
 };
 
 function getBotReply(input: string): string {
@@ -38,7 +97,7 @@ function getBotReply(input: string): string {
   for (const [key, val] of Object.entries(RESPONSES)) {
     if (clean.includes(key)) return val;
   }
-  return '🤔 No entendí bien. Escribí el número de una opción:\n\n1️⃣  Calculadora  |  2️⃣  Camiones\n3️⃣  Dashboard    |  4️⃣  Planes\n5️⃣  Hablar con persona';
+  return '🤔 No entendí bien. Escribí el número de una opción:\n\n1️⃣ Calculadora  |  2️⃣ Camiones\n3️⃣ Dashboard    |  4️⃣ Cómo funciona la IA\n5️⃣ Precisión      |  6️⃣ Planes\n7️⃣ Hablar con persona';
 }
 
 export default function SupportChat() {
