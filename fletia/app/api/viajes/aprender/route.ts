@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       diferencia: Math.round(diferencia * 10) / 10,
       aprendio,
       mensaje: aprendio
-        ? `IA actualizada: consumo base de ${consumoBaseActual} → ${nuevoConsumoBase} lts/100km`
+        ? `Actualizar litros ${consumoBaseActual} → ${nuevoConsumoBase} lts/100km`
         : 'El consumo real coincide con la estimación. ¡Excelente calibración!',
     });
 

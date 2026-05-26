@@ -77,6 +77,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   const [confirmando, setConfirmando] = useState(false);
   const [confirmado, setConfirmado] = useState(false);
   const [animando, setAnimando] = useState(false);
+  const [modalIA, setModalIA] = useState<string | null>(null);
   const resultadoRef = useRef<HTMLDivElement>(null);
 
   const [form, setForm] = useState({
@@ -1017,7 +1018,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       </div>
                     </div>
                     {(v.litros_reales === null || v.litros_reales === undefined) && (
-                      <LitrosRealesForm viajeId={v.id} onAprendido={(msg) => alert(msg)} />
+                      <LitrosRealesForm viajeId={v.id} onAprendido={(msg) => setModalIA(msg)} />
                     )}
                   </div>
                 ))}
@@ -1026,6 +1027,69 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
           )}
         </div>
       </main>
+
+      {/* Modal IA actualizada */}
+      {modalIA && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            backgroundColor: 'rgba(0,0,0,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={() => setModalIA(null)}
+        >
+          <div
+            style={{
+              background: '#1a1a1a',
+              border: '1px solid #2e2e2e',
+              borderRadius: '16px',
+              padding: '32px 36px',
+              maxWidth: '420px',
+              width: '90%',
+              boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
+              textAlign: 'center',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{
+              width: 48, height: 48, borderRadius: '50%',
+              background: 'rgba(76,175,80,0.15)',
+              border: '1px solid rgba(76,175,80,0.4)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 20px',
+              fontSize: 22,
+            }}>✓</div>
+            <p style={{
+              fontFamily: 'DM Mono, monospace',
+              fontSize: '13px',
+              color: '#e0e0e0',
+              lineHeight: 1.6,
+              margin: '0 0 28px',
+              letterSpacing: '0.01em',
+            }}>
+              {modalIA}
+            </p>
+            <button
+              onClick={() => setModalIA(null)}
+              style={{
+                background: '#4caf50',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '10px 32px',
+                fontFamily: 'DM Mono, monospace',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+              }}
+            >
+              Listo
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
