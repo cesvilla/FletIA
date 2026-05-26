@@ -7,6 +7,7 @@ export interface ParametrosViaje {
   terreno: 'plano' | 'ondulado' | 'montanoso';
   precioCombustible: number;
   condicionCamion: 'excelente' | 'buena' | 'regular';
+  factorClima?: number; // 0 = sin impacto, 0.10 = +10%
 }
 
 export interface ResultadoCalculo {
@@ -53,6 +54,7 @@ export function calcularViaje(params: ParametrosViaje): ResultadoCalculo {
   const {
     consumoBase, capacidadMax, pesoCarga, kilometros,
     tipoRuta, terreno, precioCombustible, condicionCamion,
+    factorClima = 0,
   } = params;
 
   const porcentajeCarga = Math.min(pesoCarga / capacidadMax, 1);
@@ -62,9 +64,10 @@ export function calcularViaje(params: ParametrosViaje): ResultadoCalculo {
   const incRuta      = INCREMENTOS_RUTA[tipoRuta]      ?? 0;
   const incTerreno   = INCREMENTOS_TERRENO[terreno]    ?? 0;
   const incCondicion = INCREMENTOS_CONDICION[condicionCamion] ?? 0;
+  const incClima     = factorClima; // viene de la API de clima (0 a 0.25)
 
   // Factor total = suma de incrementos (aditivo, no multiplicativo)
-  const factorTotal = 1 + incPeso + incRuta + incTerreno + incCondicion;
+  const factorTotal = 1 + incPeso + incRuta + incTerreno + incCondicion + incClima;
 
   // Factores individuales para mostrar en UI y guardar en DB
   const factorPeso      = Math.round((1 + incPeso) * 100) / 100;
@@ -80,9 +83,10 @@ export function calcularViaje(params: ParametrosViaje): ResultadoCalculo {
   const pctCarga = Math.round(porcentajeCarga * 100);
   const pctAumento = Math.round((factorTotal - 1) * 100);
 
+  const climaDesc = incClima > 0 ? ` Las condiciones climáticas agregan un ${Math.round(incClima * 100)}% adicional.` : '';
   const descripcion =
     `Con ${pesoCarga} ton de carga (${pctCarga}% de capacidad) en ruta ${tipoRuta}, ` +
-    `el consumo aumenta un ${pctAumento}% respecto al viaje vacío. ` +
+    `el consumo aumenta un ${pctAumento}% respecto al viaje vacío.${climaDesc} ` +
     `Consumo estimado: ${consumoReal.toFixed(1)} lts/100km · Total: ${litrosTotales.toFixed(1)} litros.`;
 
   return {

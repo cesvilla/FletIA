@@ -78,6 +78,13 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   const [confirmado, setConfirmado] = useState(false);
   const [animando, setAnimando] = useState(false);
   const [modalIA, setModalIA] = useState<string | null>(null);
+  const [climaRuta, setClimaRuta] = useState<{
+    puntos: { nombre: string; temp: number; lluvia: number; viento: number; condicion: string; emoji: string; factorImpacto: number; impactoPct: number }[];
+    factorMaximo: number;
+    impactoMaximoPct: number;
+    tieneAlertas: boolean;
+  } | null>(null);
+  const [loadingClima, setLoadingClima] = useState(false);
   const resultadoRef = useRef<HTMLDivElement>(null);
 
   const [form, setForm] = useState({
@@ -118,6 +125,18 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
       if (!res.ok) throw new Error(data.error || 'Error al calcular distancia');
       setForm(p => ({ ...p, kilometros: String(data.km) }));
       setMapaData({ polyline: data.polyline, origen: data.origen, destino: data.destino, km: data.km });
+      // Pre-cargar clima apenas se traza la ruta
+      setClimaRuta(null);
+      setLoadingClima(true);
+      fetch('/api/clima-ruta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ polyline: data.polyline }),
+      })
+        .then(r => r.json())
+        .then(c => { if (c.puntos) setClimaRuta(c); })
+        .catch(() => {})
+        .finally(() => setLoadingClima(false));
     } catch (err: any) {
       setErrorKm(err.message);
     } finally {
@@ -150,9 +169,24 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
       setResultado(data.resultado);
       setCamionInfo(data.camion);
       setConfirmado(false);
+      setClimaRuta(null);
       setTimeout(() => {
         resultadoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }, 150);
+
+      // Consultar clima de la ruta si hay polyline disponible
+      if (mapaData?.polyline?.length) {
+        setLoadingClima(true);
+        fetch('/api/clima-ruta', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ polyline: mapaData.polyline }),
+        })
+          .then(r => r.json())
+          .then(c => { if (c.puntos) setClimaRuta(c); })
+          .catch(() => {})
+          .finally(() => setLoadingClima(false));
+      }
 
     } catch (err: any) {
       setError(err.message);
@@ -742,6 +776,53 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       </div>
                     )}
 
+                    {/* Clima en ruta — preview bajo el mapa */}
+                    {(loadingClima || climaRuta) && !resultado && (
+                      <div style={{ border: '1px solid rgba(26,23,20,0.1)', background: '#f8f8f6', padding: '12px' }}>
+                        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '8px' }}>
+                          🌤️ {loadingClima ? 'Consultando clima en ruta...' : 'Clima actual en la ruta'}
+                        </div>
+                        {loadingClima && (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            {[1,2,3,4,5].map(i => (
+                              <div key={i} style={{ flex: 1, height: 50, background: '#e8e3db', borderRadius: 6 }} />
+                            ))}
+                          </div>
+                        )}
+                        {climaRuta && !loadingClima && (
+                          <>
+                            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${climaRuta.puntos.length}, 1fr)`, gap: 6 }}>
+                              {climaRuta.puntos.map((p, i) => (
+                                <div key={i} style={{
+                                  background: p.impactoPct > 0 ? '#fff8f0' : '#fff',
+                                  border: `1px solid ${p.impactoPct > 0 ? '#f5a623' : 'rgba(0,0,0,0.08)'}`,
+                                  borderRadius: 6, padding: '8px 6px', textAlign: 'center',
+                                }}>
+                                  <div style={{ fontSize: 18 }}>{p.emoji}</div>
+                                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', fontWeight: 700 }}>{p.temp}°C</div>
+                                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '7px', color: '#8a8278' }}>{p.condicion}</div>
+                                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '7px', color: '#8a8278' }}>💨 {p.viento}km/h</div>
+                                  {p.impactoPct > 0 && (
+                                    <div style={{ marginTop: 4, background: '#f5a623', borderRadius: 3, padding: '1px 3px', fontFamily: 'DM Mono, monospace', fontSize: '7px', fontWeight: 700, color: '#fff' }}>
+                                      +{p.impactoPct}%
+                                    </div>
+                                  )}
+                                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '7px', color: '#bbb', marginTop: 3, lineHeight: 1.2 }}>
+                                    {p.nombre.split(',')[0]}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            {climaRuta.tieneAlertas && (
+                              <div style={{ marginTop: 8, padding: '6px 10px', background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 4, fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#856404' }}>
+                                ⚠️ Clima adverso detectado — puede impactar +{climaRuta.impactoMaximoPct}% en el cálculo
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+
                     {/* Km y Peso */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -959,6 +1040,107 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       </div>
                       <p className="text-sm" style={{ color: '#4a4540', lineHeight: '1.6' }}>{resultado.descripcion}</p>
                     </div>
+
+                    {/* Clima en ruta */}
+                    {loadingClima && (
+                      <div className="p-4 bg-white border border-gray-200">
+                        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '8px' }}>
+                          🌤️ Consultando clima de la ruta...
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {[1,2,3,4,5].map(i => (
+                            <div key={i} style={{ flex: 1, height: 60, background: '#f0ede8', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {climaRuta && (
+                      <div className="p-4 bg-white border border-gray-200">
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px' }}>
+                            🌤️ Clima en ruta
+                          </div>
+                          {climaRuta.tieneAlertas && (
+                            <div style={{
+                              background: '#fff3cd', border: '1px solid #ffc107',
+                              borderRadius: 4, padding: '2px 8px',
+                              fontFamily: 'DM Mono, monospace', fontSize: '9px',
+                              color: '#856404', letterSpacing: '1px',
+                            }}>
+                              ⚠️ +{climaRuta.impactoMaximoPct}% COMBUSTIBLE
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${climaRuta.puntos.length}, 1fr)`, gap: 8 }}>
+                          {climaRuta.puntos.map((p, i) => (
+                            <div key={i} style={{
+                              background: p.impactoPct > 0 ? '#fff8f0' : '#f8f8f6',
+                              border: `1px solid ${p.impactoPct > 0 ? '#f5a623' : 'rgba(0,0,0,0.08)'}`,
+                              borderRadius: 8,
+                              padding: '10px 8px',
+                              textAlign: 'center',
+                            }}>
+                              <div style={{ fontSize: 22, marginBottom: 4 }}>{p.emoji}</div>
+                              <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', fontWeight: 700, color: '#1a1714', marginBottom: 2 }}>
+                                {p.temp}°C
+                              </div>
+                              <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', color: '#8a8278', marginBottom: 4, lineHeight: 1.3 }}>
+                                {p.condicion}
+                              </div>
+                              <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', color: '#8a8278', marginBottom: 2 }}>
+                                💨 {p.viento} km/h
+                              </div>
+                              {p.lluvia > 0 && (
+                                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', color: '#5b8dd9' }}>
+                                  🌧️ {p.lluvia} mm
+                                </div>
+                              )}
+                              {p.impactoPct > 0 && (
+                                <div style={{
+                                  marginTop: 6,
+                                  background: '#f5a623',
+                                  borderRadius: 3,
+                                  padding: '1px 4px',
+                                  fontFamily: 'DM Mono, monospace',
+                                  fontSize: '8px',
+                                  fontWeight: 700,
+                                  color: '#fff',
+                                }}>
+                                  +{p.impactoPct}% comb.
+                                </div>
+                              )}
+                              <div style={{
+                                marginTop: 6,
+                                fontFamily: 'DM Mono, monospace',
+                                fontSize: '7px',
+                                color: '#aaa',
+                                lineHeight: 1.2,
+                              }}>
+                                {p.nombre.split(',')[0]}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {climaRuta.tieneAlertas && (
+                          <div style={{
+                            marginTop: 10,
+                            padding: '8px 12px',
+                            background: '#fff3cd',
+                            border: '1px solid #ffc107',
+                            borderRadius: 6,
+                            fontFamily: 'DM Mono, monospace',
+                            fontSize: '10px',
+                            color: '#856404',
+                            lineHeight: 1.5,
+                          }}>
+                            ⚠️ Las condiciones climáticas actuales pueden incrementar el consumo de combustible hasta un <strong>+{climaRuta.impactoMaximoPct}%</strong> en los tramos afectados.
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Factores aplicados */}
                     <div className="p-4 bg-white border border-gray-200">
