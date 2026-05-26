@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import dynamic from 'next/dynamic';
@@ -74,6 +74,10 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   } | null>(null);
   const [resultado, setResultado] = useState<ResultadoIA | null>(null);
   const [camionInfo, setCamionInfo] = useState<{ patente: string; marca: string; modelo: string } | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
+  const [confirmado, setConfirmado] = useState(false);
+  const [animando, setAnimando] = useState(false);
+  const resultadoRef = useRef<HTMLDivElement>(null);
 
   const [form, setForm] = useState({
     camion_id: '',
@@ -144,11 +148,10 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
 
       setResultado(data.resultado);
       setCamionInfo(data.camion);
-
-      // Agregar al historial local
-      if (data.viaje) {
-        setViajes(prev => [data.viaje, ...prev]);
-      }
+      setConfirmado(false);
+      setTimeout(() => {
+        resultadoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 150);
 
     } catch (err: any) {
       setError(err.message);
@@ -157,9 +160,43 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     }
   }
 
+  async function handleConfirmar() {
+    if (!resultado) return;
+    setConfirmando(true);
+    try {
+      const res = await fetch('/api/viajes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, resultado, kilometros: parseFloat(form.kilometros), peso_carga: parseFloat(form.peso_carga), precio_combustible: parseFloat(form.precio_combustible), flete_cobrado: form.flete_cobrado ? parseFloat(form.flete_cobrado) : null }),
+      });
+      const data = await res.json();
+      if (data.error) { alert('Error al guardar: ' + data.error); return; }
+      if (data.viaje) {
+        setViajes(prev => [data.viaje, ...prev]);
+        setAnimando(true);
+        setTimeout(() => {
+          setAnimando(false);
+          setConfirmado(true);
+        }, 2200);
+      }
+    } finally {
+      setConfirmando(false);
+    }
+  }
+
+  function handleCancelar() {
+    setResultado(null);
+    setCamionInfo(null);
+    setConfirmado(false);
+  }
+
   // Calcular rentabilidad
   const margenNeto = resultado && form.flete_cobrado
     ? (((parseFloat(form.flete_cobrado) - resultado.costoTotal) / parseFloat(form.flete_cobrado)) * 100).toFixed(1)
+    : null;
+
+  const gananciaNeta = resultado && form.flete_cobrado
+    ? parseFloat(form.flete_cobrado) - resultado.costoTotal
     : null;
 
   const colorMargen = margenNeto
@@ -170,6 +207,343 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
 
   return (
     <div className="flex min-h-screen" style={{ backgroundColor: '#f0ede8' }}>
+
+    {/* overlay eliminado — animación ahora es inline */}
+    {false && (
+      <div>
+        <style>{`
+          @keyframes fadeInOverlay { from{opacity:0} to{opacity:1} }
+
+          @keyframes truckDrive {
+            0%   { transform:translateX(130vw) translateY(0px) rotate(0deg); animation-timing-function:linear; }
+            50%  { transform:translateX(6vw)   translateY(0px) rotate(0deg); animation-timing-function:ease-in; }
+            62%  { transform:translateX(-20vw) translateY(-8px) rotate(2deg); animation-timing-function:ease-out; }
+            72%  { transform:translateX(-55vw) translateY(-3px) rotate(1deg); animation-timing-function:linear; }
+            100% { transform:translateX(-135vw) translateY(0px) rotate(0deg); }
+          }
+
+          @keyframes cloudDrift {
+            0%   { transform:translateX(0); }
+            100% { transform:translateX(-50%); }
+          }
+          @keyframes mtnDrift {
+            0%   { transform:translateX(0); }
+            100% { transform:translateX(-50%); }
+          }
+          @keyframes treeDrift {
+            0%   { transform:translateX(0); }
+            100% { transform:translateX(-50%); }
+          }
+          @keyframes roadDash {
+            0%   { transform:translateX(0); }
+            100% { transform:translateX(50%); }
+          }
+
+          @keyframes smokeUp {
+            0%   { opacity:0;    transform:translate(0,0) scale(0.2); }
+            20%  { opacity:0.55; }
+            100% { opacity:0;    transform:translate(16px,-40px) scale(2); }
+          }
+          @keyframes smokeUp2 {
+            0%   { opacity:0;    transform:translate(0,0) scale(0.15); }
+            25%  { opacity:0.45; }
+            100% { opacity:0;    transform:translate(10px,-32px) scale(1.7); }
+          }
+          @keyframes smokeUp3 {
+            0%   { opacity:0;    transform:translate(0,0) scale(0.25); }
+            18%  { opacity:0.3; }
+            100% { opacity:0;    transform:translate(20px,-48px) scale(2.4); }
+          }
+          @keyframes wheelR {
+            from { transform:rotate(0deg); }
+            to   { transform:rotate(-360deg); }
+          }
+          @keyframes sunRay {
+            0%,100% { opacity:0.4; }
+            50%     { opacity:0.7; }
+          }
+          @keyframes fadeInText {
+            from { opacity:0; transform:translateY(10px); }
+            to   { opacity:1; transform:translateY(0); }
+          }
+          @keyframes dotPulse {
+            0%,100% { opacity:0.3; transform:scale(0.8); }
+            50%     { opacity:1;   transform:scale(1.2); }
+          }
+        `}</style>
+
+        {/* ── CIELO ── */}
+        <div style={{position:'absolute',inset:0,background:'linear-gradient(to bottom,#4fc3f7 0%,#81d4fa 35%,#e1f5fe 60%,#fff8e1 100%)'}}/>
+
+        {/* ── SOL ── */}
+        <div style={{position:'absolute',top:'12%',right:'12%',width:'70px',height:'70px'}}>
+          <div style={{position:'absolute',inset:0,borderRadius:'50%',backgroundColor:'#FFD54F',boxShadow:'0 0 40px 20px rgba(255,213,79,0.45)'}}/>
+          {[0,45,90,135].map(deg=>(
+            <div key={deg} style={{
+              position:'absolute',top:'50%',left:'50%',
+              width:'90px',height:'3px',marginTop:'-1.5px',marginLeft:'-45px',
+              background:'rgba(255,213,79,0.3)',borderRadius:'2px',
+              transform:`rotate(${deg}deg)`,
+              animation:`sunRay 2.5s ease-in-out ${deg/90*0.4}s infinite`,
+            }}/>
+          ))}
+        </div>
+
+        {/* ── NUBES ── */}
+        <div style={{position:'absolute',top:'8%',left:0,width:'200%',animation:'cloudDrift 18s linear infinite'}}>
+          {[0,1].map(r=>(
+            <svg key={r} width="1400" height="80" viewBox="0 0 1400 80" fill="none" style={{display:'inline-block',flexShrink:0}}>
+              {[[100,40,55],[320,30,40],[600,45,70],[850,35,50],[1050,42,60],[1250,28,38]].map(([x,y,s],i)=>(
+                <g key={i}>
+                  <ellipse cx={x}    cy={y}    rx={s}    ry={s*0.55} fill="white" opacity="0.9"/>
+                  <ellipse cx={x+s*0.6} cy={y+4} rx={s*0.65} ry={s*0.42} fill="white" opacity="0.85"/>
+                  <ellipse cx={x-s*0.5} cy={y+6} rx={s*0.5}  ry={s*0.38} fill="white" opacity="0.8"/>
+                </g>
+              ))}
+            </svg>
+          ))}
+        </div>
+
+        {/* ── TEXTO ── */}
+        <div style={{position:'absolute',top:'14%',left:'50%',transform:'translateX(-50%)',zIndex:5,textAlign:'center',animation:'fadeInText 0.5s ease 0.2s both',opacity:0}}>
+          <div style={{fontFamily:'DM Mono,monospace',fontSize:'11px',letterSpacing:'4px',color:'#0277bd',textTransform:'uppercase',marginBottom:'8px'}}>
+            // viaje confirmado
+          </div>
+          <div style={{fontFamily:'Barlow Condensed,sans-serif',fontSize:'2.5rem',fontWeight:900,color:'#01579b',lineHeight:1}}>
+            ¡Buen viaje! 🚛
+          </div>
+          <div style={{fontFamily:'DM Mono,monospace',fontSize:'11px',color:'#0288d1',marginTop:'8px'}}>
+            Guardado en el historial
+          </div>
+        </div>
+
+        {/* ── ESCENA ── */}
+        <div style={{position:'absolute',bottom:0,left:0,right:0,height:'260px',overflow:'hidden'}}>
+
+          {/* Montañas lejanas */}
+          <div style={{position:'absolute',bottom:'95px',left:0,width:'200%',animation:'mtnDrift 9s linear infinite'}}>
+            {[0,1].map(r=>(
+              <svg key={r} width="1400" height="120" viewBox="0 0 1400 120" fill="none" style={{flexShrink:0,display:'inline-block'}}>
+                <polygon points="0,120 140,22 280,120"   fill="#a5d6a7" opacity="0.7"/>
+                <polygon points="220,120 400,6 580,120"  fill="#81c784" opacity="0.75"/>
+                <polygon points="500,120 660,30 820,120" fill="#a5d6a7" opacity="0.6"/>
+                <polygon points="740,120 940,4 1140,120" fill="#66bb6a" opacity="0.75"/>
+                <polygon points="1060,120 1220,20 1380,120" fill="#81c784" opacity="0.65"/>
+                {/* nieve */}
+                <polygon points="400,6 378,32 422,32"   fill="white" opacity="0.75"/>
+                <polygon points="940,4 916,30 964,30"   fill="white" opacity="0.75"/>
+              </svg>
+            ))}
+          </div>
+
+          {/* Árboles */}
+          <div style={{position:'absolute',bottom:'93px',left:0,width:'200%',animation:'treeDrift 2.6s linear infinite'}}>
+            {[0,1].map(r=>(
+              <svg key={r} width="1300" height="90" viewBox="0 0 1300 90" fill="none" style={{display:'inline-block',flexShrink:0}}>
+                {[[60,44],[170,52],[300,40],[430,48],[560,44],[690,50],[820,42],[950,48],[1080,45],[1210,51]].map(([x,y],i)=>(
+                  <g key={i}>
+                    <rect x={x-4} y={y+12} width={i%3===0?9:6} height={90-y-12} fill="#5d4037"/>
+                    <polygon points={`${x},${y-20} ${x-24},${y+14} ${x+24},${y+14}`} fill={i%2===0?"#2e7d32":"#388e3c"}/>
+                    <polygon points={`${x},${y-6}  ${x-20},${y+18} ${x+20},${y+18}`} fill={i%2===0?"#388e3c":"#43a047"}/>
+                  </g>
+                ))}
+              </svg>
+            ))}
+          </div>
+
+          {/* Pasto */}
+          <div style={{position:'absolute',bottom:'91px',left:0,right:0,height:'6px',backgroundColor:'#66bb6a'}}/>
+          <div style={{position:'absolute',bottom:'78px',left:0,right:0,height:'15px',backgroundColor:'#81c784'}}/>
+
+          {/* Arcén */}
+          <div style={{position:'absolute',bottom:'72px',left:0,right:0,height:'8px',backgroundColor:'#bcaaa4'}}/>
+
+          {/* ASFALTO — 2 carriles */}
+          <div style={{position:'absolute',bottom:0,left:0,right:0,height:'74px',backgroundColor:'#424242'}}/>
+
+          {/* Línea blanca borde izquierdo */}
+          <div style={{position:'absolute',bottom:'70px',left:0,right:0,height:'3px',backgroundColor:'#f5f5f5'}}/>
+
+          {/* Línea punteada central — se mueve hacia la derecha (camión va ←) */}
+          <div style={{
+            position:'absolute',bottom:'36px',left:0,
+            width:'200%',height:'4px',
+            background:'repeating-linear-gradient(90deg,#f5f5f5 0px,#f5f5f5 50px,transparent 50px,transparent 100px)',
+            animation:'roadDash 0.5s linear infinite',
+          }}/>
+
+          {/* Línea blanca borde derecho */}
+          <div style={{position:'absolute',bottom:'3px',left:0,right:0,height:'3px',backgroundColor:'#f5f5f5'}}/>
+
+          {/* Sombra del camión en asfalto */}
+          <div style={{
+            position:'absolute',bottom:'70px',left:0,
+            width:'280px',height:'8px',
+            background:'radial-gradient(ellipse,rgba(0,0,0,0.35) 0%,transparent 70%)',
+            animation:'truckDrive 3.8s forwards',
+            transformOrigin:'left center',
+            filter:'blur(3px)',
+          }}/>
+
+          {/* ── CAMIÓN (frente a la izquierda) ── */}
+          <div style={{
+            position:'absolute',bottom:'70px',right:0,
+            animation:'truckDrive 3.8s forwards',
+            fontSize:'0',zIndex:4,
+            transformOrigin:'right bottom',
+          }}>
+            <svg width="340" height="80" viewBox="0 0 340 80" fill="none">
+
+              {/* === ESCAPES VERTICALES (lado cab, arriba) === */}
+              <rect x="106" y="0" width="6" height="16" rx="3" fill="#90a4ae"/>
+              <rect x="116" y="0" width="6" height="16" rx="3" fill="#90a4ae"/>
+              {/* Tapas cromadas */}
+              <rect x="104" y="0" width="10" height="3" rx="1" fill="#cfd8dc"/>
+              <rect x="114" y="0" width="10" height="3" rx="1" fill="#cfd8dc"/>
+              {/* Humo escapes — delay 1.8s */}
+              <circle cx="109" cy="0" r="7"  fill="rgba(150,150,150,0.6)"  style={{animation:'smokeUp 0.65s ease-out 1.8s infinite',opacity:0}}/>
+              <circle cx="119" cy="0" r="6"  fill="rgba(180,180,180,0.45)" style={{animation:'smokeUp2 0.7s ease-out 1.95s infinite',opacity:0}}/>
+              <circle cx="113" cy="0" r="9"  fill="rgba(200,200,200,0.3)"  style={{animation:'smokeUp3 0.8s ease-out 2.1s infinite',opacity:0}}/>
+
+              {/* === CAPÓ LARGO — frente izquierdo === */}
+              {/* Parachoque cromado */}
+              <rect x="4"  y="44" width="16" height="20" rx="2" fill="#cfd8dc"/>
+              <rect x="4"  y="45" width="16" height="3"  fill="rgba(255,255,255,0.6)"/>
+              <rect x="4"  y="56" width="16" height="3"  fill="rgba(255,255,255,0.4)"/>
+              {/* Grille */}
+              <rect x="4"  y="26" width="16" height="19" rx="1" fill="#78909c"/>
+              {[0,1,2,3,4,5].map(i=>(
+                <rect key={i} x="4" y={28+i*3} width="16" height="1.5" fill="#b0bec5" opacity="0.9"/>
+              ))}
+              {/* Faro izq (frente) */}
+              <rect x="5"  y="46" width="12" height="8" rx="2" fill="#fff9c4"/>
+              <rect x="3"  y="44" width="8"  height="12" rx="1" fill="rgba(255,249,196,0.4)"/>
+              {/* Señalero */}
+              <rect x="5"  y="44" width="12" height="3"  rx="1" fill="#ffcc02" opacity="0.9"/>
+              {/* Capó */}
+              <rect x="20" y="26" width="58" height="38" rx="3" fill="#c62828"/>
+              {/* Brillo capó */}
+              <rect x="22" y="27" width="54" height="6" rx="2" fill="#ef5350" opacity="0.5"/>
+              {/* Línea capó */}
+              <rect x="20" y="42" width="58" height="3" fill="rgba(0,0,0,0.18)"/>
+              {/* Escape lateral motor */}
+              <rect x="22" y="30" width="4" height="10" rx="1" fill="#546e7a"/>
+
+              {/* === ESPEJO IZQUIERDO === */}
+              <rect x="72" y="18" width="10" height="6" rx="1" fill="#b71c1c"/>
+              <rect x="78" y="14" width="3"  height="9" fill="#8d1515"/>
+
+              {/* === CABINA ALTA === */}
+              <rect x="78" y="10" width="60" height="54" rx="5" fill="#c62828"/>
+              {/* Techo/Fairing aerodinámico */}
+              <path d="M78,10 Q100,2 138,6 L138,14 L78,14 Z" fill="#b71c1c"/>
+              {/* Parabrisas (lado derecho de la cab, ya que mira izq) */}
+              <rect x="80" y="15" width="28" height="26" rx="3" fill="rgba(144,202,249,0.7)"/>
+              {/* Reflejo parabrisas */}
+              <rect x="82" y="17" width="12" height="12" rx="2" fill="rgba(255,255,255,0.22)"/>
+              {/* Marco parabrisas */}
+              <rect x="80" y="15" width="28" height="2"  rx="1" fill="#b71c1c"/>
+              {/* Puerta */}
+              <rect x="110" y="18" width="24" height="36" rx="2" fill="rgba(0,0,0,0.07)"/>
+              <circle cx="113" cy="36" r="2.5" fill="rgba(255,255,255,0.5)"/>
+              {/* Línea cintura cab */}
+              <rect x="78"  y="46" width="60" height="4"  fill="rgba(0,0,0,0.2)"/>
+              {/* Franja cromada lateral */}
+              <rect x="78"  y="50" width="60" height="3"  fill="#b0bec5" opacity="0.6"/>
+              {/* Tanque combustible */}
+              <rect x="114" y="52" width="20" height="12" rx="3" fill="#b71c1c"/>
+              <rect x="116" y="54" width="16" height="2"  rx="1" fill="rgba(255,255,255,0.15)"/>
+
+              {/* === SLEEPER === */}
+              <rect x="138" y="14" width="34" height="50" rx="2" fill="#ad1414"/>
+              {/* Ventana sleeper */}
+              <rect x="148" y="20" width="16" height="14" rx="2" fill="rgba(144,202,249,0.55)"/>
+              <rect x="150" y="22" width="7"  height="7"  rx="1" fill="rgba(255,255,255,0.2)"/>
+              {/* División sleeper/cab */}
+              <rect x="136" y="14" width="4"  height="50" fill="#8b0000" opacity="0.5"/>
+
+              {/* === 5TH WHEEL === */}
+              <rect x="162" y="58" width="24" height="6" rx="1" fill="#546e7a"/>
+              <rect x="168" y="56" width="12" height="4" rx="1" fill="#607d8b"/>
+
+              {/* === TRAILER (blanco/plata) === */}
+              <rect x="184" y="18" width="150" height="42" rx="2" fill="#e0e0e0"/>
+              <rect x="186" y="20" width="146" height="38" rx="1" fill="#eeeeee"/>
+              {/* Franjas metálicas trailer */}
+              <rect x="186" y="20" width="146" height="4"  fill="#bdbdbd"/>
+              <rect x="186" y="54" width="146" height="4"  fill="#bdbdbd"/>
+              {/* Refuerzos verticales */}
+              {[210,240,270,300].map(xv=>(
+                <rect key={xv} x={xv} y={20} width="2" height="38" fill="#bdbdbd" opacity="0.6"/>
+              ))}
+              {/* Franja roja decorativa */}
+              <rect x="186" y="35" width="146" height="5"  fill="#ef5350" opacity="0.8"/>
+              {/* Logo FletIA */}
+              <text x="218" y="33" fontFamily="sans-serif" fontWeight="900" fontSize="14" fill="#c62828">FletIA</text>
+              {/* Puerta trasera */}
+              <rect x="326" y="18" width="8"  height="42" fill="#bdbdbd" rx="1"/>
+              <rect x="328" y="28" width="4"  height="22" rx="1" fill="#9e9e9e"/>
+
+              {/* Humo ruedas traseras (delay 1.85s) */}
+              <circle cx="295" cy="58" r="9"  fill="rgba(190,190,190,0.55)" style={{animation:'smokeUp 0.55s ease-out 1.85s infinite',opacity:0}}/>
+              <circle cx="308" cy="55" r="11" fill="rgba(170,170,170,0.4)"  style={{animation:'smokeUp2 0.6s ease-out 2.0s infinite',opacity:0}}/>
+              <circle cx="286" cy="52" r="7"  fill="rgba(210,210,210,0.35)" style={{animation:'smokeUp3 0.7s ease-out 1.9s infinite',opacity:0}}/>
+
+              {/* === RUEDAS === */}
+              {/* Steer axle (frente) */}
+              {[()=>(
+                <g key="s">
+                  <circle cx={50} cy={68} r={14} fill="#212121" style={{animation:'wheelR 0.28s linear infinite',transformOrigin:'50px 68px'}}/>
+                  <circle cx={50} cy={68} r={9}  fill="#424242"/>
+                  <line x1={50} y1={58} x2={50} y2={78} stroke="#666" strokeWidth="2"/>
+                  <line x1={40} y1={68} x2={60} y2={68} stroke="#666" strokeWidth="2"/>
+                  <line x1={43} y1={61} x2={57} y2={75} stroke="#555" strokeWidth="1.5"/>
+                  <line x1={57} y1={61} x2={43} y2={75} stroke="#555" strokeWidth="1.5"/>
+                  <circle cx={50} cy={68} r={3}  fill="#9e9e9e"/>
+                </g>
+              )].map(fn=>fn())}
+
+              {/* Drive axles */}
+              {[148,170].map(cx=>(
+                <g key={cx}>
+                  <circle cx={cx} cy={68} r={14} fill="#212121" style={{animation:'wheelR 0.28s linear infinite',transformOrigin:`${cx}px 68px`}}/>
+                  <circle cx={cx} cy={68} r={9}  fill="#424242"/>
+                  <line x1={cx} y1={58} x2={cx} y2={78} stroke="#666" strokeWidth="2"/>
+                  <line x1={cx-10} y1={68} x2={cx+10} y2={68} stroke="#666" strokeWidth="2"/>
+                  <line x1={cx-7} y1={61} x2={cx+7} y2={75} stroke="#555" strokeWidth="1.5"/>
+                  <line x1={cx+7} y1={61} x2={cx-7} y2={75} stroke="#555" strokeWidth="1.5"/>
+                  <circle cx={cx} cy={68} r={3}  fill="#9e9e9e"/>
+                </g>
+              ))}
+
+              {/* Trailer rear dual */}
+              {[285,310].map(cx=>(
+                <g key={cx}>
+                  <circle cx={cx} cy={68} r={14} fill="#212121" style={{animation:'wheelR 0.28s linear infinite',transformOrigin:`${cx}px 68px`}}/>
+                  <circle cx={cx} cy={68} r={9}  fill="#424242"/>
+                  <line x1={cx} y1={58} x2={cx} y2={78} stroke="#666" strokeWidth="2"/>
+                  <line x1={cx-10} y1={68} x2={cx+10} y2={68} stroke="#666" strokeWidth="2"/>
+                  <line x1={cx-7} y1={61} x2={cx+7} y2={75} stroke="#555" strokeWidth="1.5"/>
+                  <line x1={cx+7} y1={61} x2={cx-7} y2={75} stroke="#555" strokeWidth="1.5"/>
+                  <circle cx={cx} cy={68} r={3}  fill="#9e9e9e"/>
+                </g>
+              ))}
+            </svg>
+          </div>
+        </div>
+
+        {/* Dots */}
+        <div style={{position:'absolute',bottom:'28px',left:'50%',transform:'translateX(-50%)',zIndex:5,display:'flex',gap:'10px'}}>
+          {[0,1,2].map(i=>(
+            <div key={i} style={{
+              width:'8px',height:'8px',borderRadius:'50%',
+              backgroundColor:'#0288d1',
+              animation:`dotPulse 0.9s ease-in-out ${i*0.2}s infinite`,
+            }}/>
+          ))}
+        </div>
+      </div>
+    )}
 
       {sidebarOpen && (
         <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-40 md:hidden" />
@@ -197,6 +571,10 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
           <a className="flex items-center gap-2 px-5 py-2.5 text-sm text-white font-medium" style={{ backgroundColor: 'rgba(212,68,12,0.15)', borderLeft: '2px solid #d4440c' }}>
             <span>🧮</span> Calculadora
           </a>
+          <a href="/historial" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
+            <span>📋</span> Historial
+          </a>
+          <div className="px-5 my-4 text-white/25 uppercase" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', letterSpacing: '2px' }}>Flota</div>
           <a href="/camiones" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
             <span>🚛</span> Mis camiones
           </a>
@@ -270,7 +648,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
 
                     {/* Camión */}
                     <div>
-                      <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '1px', color: '#8a8278', textTransform: 'uppercase' }}>Camión *</label>
+                      <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '1px', color: '#1a1714', textTransform: 'uppercase' }}>Camión *</label>
                       <select
                         value={form.camion_id}
                         onChange={e => setForm(p => ({ ...p, camion_id: e.target.value }))}
@@ -295,7 +673,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                     {/* Origen / Destino */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase' }}>Origen</label>
+                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>Origen</label>
                         <input
                           type="text"
                           value={form.origen}
@@ -306,7 +684,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         />
                       </div>
                       <div>
-                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase' }}>Destino</label>
+                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>Destino</label>
                         <input
                           type="text"
                           value={form.destino}
@@ -366,7 +744,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                     {/* Km y Peso */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase' }}>Kilómetros *</label>
+                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>Kilómetros *</label>
                         <input
                           type="number"
                           value={form.kilometros}
@@ -378,7 +756,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         />
                       </div>
                       <div>
-                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase' }}>
+                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>
                           Peso carga (ton) *
                           {camionSeleccionado && (
                             <span style={{ color: '#d4440c' }}> máx {camionSeleccionado.capacidad_max_ton}</span>
@@ -401,7 +779,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                     {/* Tipo ruta y terreno */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase' }}>Tipo de ruta</label>
+                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>Tipo de ruta</label>
                         <select
                           value={form.tipo_ruta}
                           onChange={e => setForm(p => ({ ...p, tipo_ruta: e.target.value }))}
@@ -414,7 +792,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         </select>
                       </div>
                       <div>
-                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase' }}>Terreno</label>
+                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>Terreno</label>
                         <select
                           value={form.terreno}
                           onChange={e => setForm(p => ({ ...p, terreno: e.target.value }))}
@@ -431,7 +809,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                     {/* Precio combustible y flete */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase' }}>Precio gasoil ($/litro) *</label>
+                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>Precio gasoil ($/litro) *</label>
                         <input
                           type="number"
                           value={form.precio_combustible}
@@ -442,7 +820,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         />
                       </div>
                       <div>
-                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase' }}>Flete cobrado ($) <span style={{ color: '#8a8278' }}>opcional</span></label>
+                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>Flete cobrado ($) <span style={{ color: '#8a8278' }}>opcional</span></label>
                         <input
                           type="number"
                           value={form.flete_cobrado}
@@ -485,7 +863,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                 )}
 
                 {resultado && (
-                  <div className="space-y-4">
+                  <div className="space-y-4" ref={resultadoRef}>
 
                     {/* Card principal del resultado */}
                     <div className="text-white p-6" style={{ backgroundColor: '#1a1714' }}>
@@ -514,6 +892,40 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       </div>
                     </div>
 
+                    {/* Confirmar / Cancelar / Animación / Confirmado */}
+                    {!confirmado && !animando && (
+                      <div className="flex gap-3">
+                        <button
+                          onClick={handleConfirmar}
+                          disabled={confirmando}
+                          className="flex-1 py-3 text-white font-bold text-sm transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+                          style={{ backgroundColor: '#1a6b3a' }}
+                        >
+                          {confirmando ? 'Guardando...' : '✅ Confirmar viaje'}
+                        </button>
+                        <button
+                          onClick={handleCancelar}
+                          className="flex-1 py-3 font-bold text-sm transition-colors"
+                          style={{ backgroundColor: 'rgba(212,68,12,0.1)', border: '1px solid rgba(212,68,12,0.35)', color: '#d4440c' }}
+                          onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(212,68,12,0.18)')}
+                          onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(212,68,12,0.1)')}
+                        >
+                          ✕ Cancelar
+                        </button>
+                      </div>
+                    )}
+
+                    {(animando || confirmado) && (
+                      <div style={{ position:'relative', width:'100%', height:'56px', overflow:'hidden', border:'1px solid rgba(26,107,58,0.3)', background: confirmado ? 'rgba(26,107,58,0.1)' : 'linear-gradient(to bottom,#4fc3f7 0%,#81d4fa 45%,#e8f5e9 75%)' }}>
+                        {animando && <TruckAnimation />}
+                        {confirmado && (
+                          <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'14px',color:'#1a6b3a'}}>
+                            ✓ Viaje guardado en el historial
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Rentabilidad */}
                     {margenNeto && (
                       <div className="p-4 border" style={{ backgroundColor: parseFloat(margenNeto) > 0 ? 'rgba(26,107,58,0.08)' : 'rgba(212,68,12,0.08)', borderColor: parseFloat(margenNeto) > 0 ? 'rgba(26,107,58,0.3)' : 'rgba(212,68,12,0.3)' }}>
@@ -524,8 +936,16 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                           <div className="text-sm" style={{ color: '#4a4540' }}>
                             Flete: ${parseFloat(form.flete_cobrado).toLocaleString('es-AR')} · Combustible: ${resultado.costoTotal.toLocaleString('es-AR')}
                           </div>
-                          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '28px', fontWeight: 900, color: colorMargen }}>
-                            {parseFloat(margenNeto) > 0 ? '+' : ''}{margenNeto}%
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '1px', color: colorMargen, textTransform: 'uppercase', marginBottom: '2px' }}>
+                              {gananciaNeta! >= 0 ? 'Ganancia' : 'Pérdida'}
+                            </div>
+                            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '36px', fontWeight: 900, color: colorMargen, lineHeight: 1 }}>
+                              {gananciaNeta! >= 0 ? '' : '-'}${Math.abs(Math.round(gananciaNeta!)).toLocaleString('es-AR')}
+                            </div>
+                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: colorMargen, opacity: 0.75, marginTop: '2px' }}>
+                              {parseFloat(margenNeto) > 0 ? '+' : ''}{margenNeto}% del flete
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -606,6 +1026,152 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+function TruckAnimation() {
+  return (
+    <div style={{position:'absolute',inset:0}}>
+      <style>{`
+        @keyframes ta_truck {
+          0%   { transform:translateX(110%) translateY(0) rotate(0deg); animation-timing-function:linear; }
+          48%  { transform:translateX(10%)  translateY(0) rotate(0deg); animation-timing-function:ease-in; }
+          60%  { transform:translateX(-15%) translateY(-3px) rotate(1.5deg); animation-timing-function:ease-out; }
+          75%  { transform:translateX(-55%) translateY(-1px) rotate(0.3deg); animation-timing-function:linear; }
+          100% { transform:translateX(-115%) translateY(0) rotate(0deg); }
+        }
+        @keyframes ta_truck { 0%{transform:translateX(110%);animation-timing-function:linear} 45%{transform:translateX(8%);animation-timing-function:ease-in} 58%{transform:translateX(-18%) translateY(-3px) rotate(1.5deg);animation-timing-function:ease-out} 100%{transform:translateX(-115%)} }
+        @keyframes ta_road  { 0%{transform:translateX(0)} 100%{transform:translateX(50%)} }
+        @keyframes ta_tree  { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+        @keyframes ta_cloud { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+        @keyframes ta_wR    { from{transform:rotate(0deg)} to{transform:rotate(-360deg)} }
+        @keyframes ta_smoke {
+          0%   { opacity:0;   transform:translate(0,0) scale(0.2); }
+          20%  { opacity:0.5; }
+          100% { opacity:0;   transform:translate(6px,-14px) scale(1.4); }
+        }
+        @keyframes ta_smoke2 {
+          0%   { opacity:0;   transform:translate(0,0) scale(0.15); }
+          25%  { opacity:0.4; }
+          100% { opacity:0;   transform:translate(4px,-10px) scale(1.2); }
+        }
+      `}</style>
+
+      {/* Nubes */}
+      <div style={{position:'absolute',top:'2px',left:0,width:'200%',animation:'ta_cloud 10s linear infinite'}}>
+        {[0,1].map(r=>(
+          <svg key={r} width="700" height="18" viewBox="0 0 700 18" fill="none" style={{display:'inline-block',flexShrink:0}}>
+            {[[80,8,14],[260,6,10],[460,9,16],[620,5,9]].map(([x,y,s],i)=>(
+              <g key={i}>
+                <ellipse cx={x} cy={y} rx={s} ry={s*0.5} fill="white" opacity="0.85"/>
+                <ellipse cx={x+s*0.6} cy={y+2} rx={s*0.55} ry={s*0.38} fill="white" opacity="0.8"/>
+              </g>
+            ))}
+          </svg>
+        ))}
+      </div>
+
+      {/* Árboles */}
+      <div style={{position:'absolute',bottom:'18px',left:0,width:'200%',animation:'ta_tree 1.8s linear infinite'}}>
+        {[0,1].map(r=>(
+          <svg key={r} width="700" height="22" viewBox="0 0 700 22" fill="none" style={{display:'inline-block',flexShrink:0}}>
+            {[[40,10],[130,12],[240,9],[360,11],[480,10],[600,12]].map(([x,y],i)=>(
+              <g key={i}>
+                <rect x={x-2} y={y+4} width={3} height={22-y-4} fill="#5d4037"/>
+                <polygon points={`${x},${y-6} ${x-9},${y+6} ${x+9},${y+6}`} fill={i%2===0?"#2e7d32":"#388e3c"}/>
+                <polygon points={`${x},${y}   ${x-7},${y+9} ${x+7},${y+9}`} fill={i%2===0?"#388e3c":"#43a047"}/>
+              </g>
+            ))}
+          </svg>
+        ))}
+      </div>
+
+      {/* Pasto */}
+      <div style={{position:'absolute',bottom:'16px',left:0,right:0,height:'4px',backgroundColor:'#66bb6a'}}/>
+
+      {/* Asfalto */}
+      <div style={{position:'absolute',bottom:0,left:0,right:0,height:'18px',backgroundColor:'#424242'}}/>
+      <div style={{position:'absolute',bottom:'17px',left:0,right:0,height:'2px',backgroundColor:'#f5f5f5'}}/>
+      <div style={{position:'absolute',bottom:'1px',left:0,right:0,height:'2px',backgroundColor:'#f5f5f5'}}/>
+
+      {/* Línea punteada */}
+      <div style={{
+        position:'absolute',bottom:'8px',left:0,
+        width:'200%',height:'2px',
+        background:'repeating-linear-gradient(90deg,#f5f5f5 0px,#f5f5f5 24px,transparent 24px,transparent 48px)',
+        animation:'ta_road 0.35s linear infinite',
+      }}/>
+
+      {/* Camión escalado pequeño */}
+      <div style={{position:'absolute',bottom:'16px',right:0,width:'100%',animation:'ta_truck 2.1s forwards',fontSize:'0',zIndex:3}}>
+        <svg width="160" height="38" viewBox="0 0 260 62" fill="none" style={{height:'38px',width:'auto'}}>
+          {/* Escapes */}
+          <rect x="82" y="2" width="5" height="10" rx="2" fill="#90a4ae"/>
+          <rect x="90" y="2" width="5" height="10" rx="2" fill="#90a4ae"/>
+          <circle cx="86" cy="2" r="5" fill="rgba(150,150,150,0.6)" style={{animation:'ta_smoke 0.6s ease-out 1.8s infinite',opacity:0}}/>
+          <circle cx="94" cy="2" r="4" fill="rgba(180,180,180,0.45)" style={{animation:'ta_smoke2 0.65s ease-out 1.95s infinite',opacity:0}}/>
+          {/* Parachoque + grille */}
+          <rect x="3" y="34" width="14" height="16" rx="2" fill="#cfd8dc"/>
+          <rect x="3" y="20" width="14" height="15" rx="1" fill="#78909c"/>
+          {[0,1,2,3,4].map(i=>(<rect key={i} x="3" y={22+i*2.8} width="14" height="1.2" fill="#b0bec5" opacity="0.9"/>))}
+          <rect x="4" y="36" width="11" height="7" rx="1" fill="#fff9c4"/>
+          <rect x="4" y="34" width="11" height="3" rx="1" fill="#ffcc02" opacity="0.85"/>
+          {/* Capó */}
+          <rect x="17" y="20" width="46" height="30" rx="3" fill="#c62828"/>
+          <rect x="19" y="21" width="42" height="5" rx="1" fill="#ef5350" opacity="0.5"/>
+          {/* Espejo */}
+          <rect x="57" y="14" width="9" height="5" rx="1" fill="#b71c1c"/>
+          <rect x="62" y="11" width="3" height="8" fill="#8d1515"/>
+          {/* Cabina */}
+          <rect x="63" y="8" width="50" height="42" rx="5" fill="#c62828"/>
+          <path d="M63,8 Q82,1 113,5 L113,11 L63,11 Z" fill="#b71c1c"/>
+          <rect x="65" y="12" width="23" height="20" rx="3" fill="rgba(144,202,249,0.7)"/>
+          <rect x="67" y="14" width="10" height="9" rx="1" fill="rgba(255,255,255,0.22)"/>
+          <rect x="88" y="15" width="20" height="27" rx="2" fill="rgba(0,0,0,0.07)"/>
+          <circle cx="91" cy="29" r="2" fill="rgba(255,255,255,0.5)"/>
+          <rect x="63" y="36" width="50" height="4" fill="rgba(0,0,0,0.2)"/>
+          {/* Sleeper */}
+          <rect x="113" y="11" width="26" height="39" rx="2" fill="#ad1414"/>
+          <rect x="120" y="16" width="13" height="11" rx="2" fill="rgba(144,202,249,0.5)"/>
+          <rect x="111" y="11" width="4" height="39" fill="#8b0000" opacity="0.4"/>
+          {/* Trailer */}
+          <rect x="144" y="14" width="112" height="32" rx="2" fill="#e0e0e0"/>
+          <rect x="146" y="16" width="108" height="28" rx="1" fill="#eeeeee"/>
+          <rect x="146" y="16" width="108" height="3" fill="#bdbdbd"/>
+          <rect x="146" y="41" width="108" height="3" fill="#bdbdbd"/>
+          <rect x="146" y="26" width="108" height="4" fill="#ef5350" opacity="0.8"/>
+          <text x="166" y="26" fontFamily="sans-serif" fontWeight="900" fontSize="11" fill="#c62828">FletIA</text>
+          <rect x="250" y="14" width="6" height="32" fill="#bdbdbd" rx="1"/>
+          {/* Humo ruedas */}
+          <circle cx="226" cy="44" r="6" fill="rgba(190,190,190,0.5)" style={{animation:'ta_smoke 0.5s ease-out 1.85s infinite',opacity:0}}/>
+          <circle cx="236" cy="42" r="7" fill="rgba(170,170,170,0.38)" style={{animation:'ta_smoke2 0.55s ease-out 2.0s infinite',opacity:0}}/>
+          {/* Ruedas */}
+          <circle cx={38} cy={52} r={11} fill="#212121" style={{animation:'ta_wR 0.28s linear infinite',transformOrigin:'38px 52px'}}/>
+          <circle cx={38} cy={52} r={7} fill="#424242"/>
+          <line x1={38} y1={43} x2={38} y2={61} stroke="#666" strokeWidth="1.5"/>
+          <line x1={30} y1={52} x2={46} y2={52} stroke="#666" strokeWidth="1.5"/>
+          <circle cx={38} cy={52} r={2.5} fill="#9e9e9e"/>
+          {[116,133].map(cx=>(
+            <g key={cx}>
+              <circle cx={cx} cy={52} r={11} fill="#212121" style={{animation:'ta_wR 0.28s linear infinite',transformOrigin:`${cx}px 52px`}}/>
+              <circle cx={cx} cy={52} r={7} fill="#424242"/>
+              <line x1={cx} y1={43} x2={cx} y2={61} stroke="#666" strokeWidth="1.5"/>
+              <line x1={cx-8} y1={52} x2={cx+8} y2={52} stroke="#666" strokeWidth="1.5"/>
+              <circle cx={cx} cy={52} r={2.5} fill="#9e9e9e"/>
+            </g>
+          ))}
+          {[218,234].map(cx=>(
+            <g key={cx}>
+              <circle cx={cx} cy={52} r={11} fill="#212121" style={{animation:'ta_wR 0.28s linear infinite',transformOrigin:`${cx}px 52px`}}/>
+              <circle cx={cx} cy={52} r={7} fill="#424242"/>
+              <line x1={cx} y1={43} x2={cx} y2={61} stroke="#666" strokeWidth="1.5"/>
+              <line x1={cx-8} y1={52} x2={cx+8} y2={52} stroke="#666" strokeWidth="1.5"/>
+              <circle cx={cx} cy={52} r={2.5} fill="#9e9e9e"/>
+            </g>
+          ))}
+        </svg>
+      </div>
     </div>
   );
 }

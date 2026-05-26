@@ -30,10 +30,23 @@ export default function DashboardClient({ email, empresa, userId, gastoMes, tota
 
   async function agregarRecordatorio() {
     if (!nuevoRec.trim()) return;
-    const { data } = await supabase.from('recordatorios').insert({
-      user_id: userId, texto: nuevoRec.trim(), fecha: fechaRec || null, completado: false
-    }).select().single();
-    if (data) { setRecs([...recs, data]); setNuevoRec(''); setFechaRec(''); setAddingRec(false); }
+    const texto = nuevoRec.trim();
+    const fecha = fechaRec || null;
+
+    const { data, error } = await supabase.from('recordatorios').insert({
+      user_id: userId, texto, fecha, completado: false
+    }).select();
+
+    if (error) {
+      console.error('Error al guardar recordatorio:', error);
+      return;
+    }
+
+    const nuevo = data?.[0] ?? { id: crypto.randomUUID(), texto, fecha, completado: false };
+    setRecs([...recs, nuevo]);
+    setNuevoRec('');
+    setFechaRec('');
+    setAddingRec(false);
   }
 
   async function completarRecordatorio(id: string) {

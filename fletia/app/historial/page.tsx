@@ -9,7 +9,7 @@ export default async function HistorialPage() {
 
   const { data: viajes } = await supabase
     .from('viajes')
-    .select('*, camiones(patente, marca, modelo)')
+    .select('*, camiones(patente, marca, modelo, capacidad_max_ton)')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 

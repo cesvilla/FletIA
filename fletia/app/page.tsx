@@ -177,27 +177,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="section" id="pricing" style={{paddingTop:'32px'}}>
-          <div className="section-head reveal" style={{justifyContent:'center',textAlign:'center',flexDirection:'column',alignItems:'center',marginBottom:'36px'}}>
-            <div><div className="section-tag" style={{color:'rgb(253,100,48)'}}>// Precio simple</div></div>
-          </div>
-          <div className="price-wrap reveal">
-            <div className="price">
-              <div className="label">Plan único</div>
-              <div className="amt">Gratis</div>
-              <div className="sub">15 días completos</div>
-              <ul>
-                <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Camiones ilimitados</li>
-                <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Viajes ilimitados</li>
-                <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> IA que aprende por camión</li>
-                <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Reporte de rentabilidad</li>
-                <li>Soporte</li>
-              </ul>
-              <Link href="/registro" className="btn amber lg">⚡ Empezar ahora</Link>
-            </div>
-          </div>
-        </section>
-
         <footer>
           <div className="foot">
             <div className="made">

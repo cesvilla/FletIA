@@ -38,6 +38,7 @@ export async function POST(request: Request) {
       .insert({
         user_id: user.id,
         patente: body.patente.toUpperCase().trim(),
+        patente_semi: body.patente_semi ? body.patente_semi.toUpperCase().trim() : null,
         marca: body.marca,
         modelo: body.modelo,
         anio: body.anio,

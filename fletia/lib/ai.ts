@@ -118,6 +118,6 @@ export function calcularNuevoConsumoBase(
   const factorTotal  = 1 + incPeso + incRuta + incTerreno + incCondicion;
 
   const consumoBaseImplicito = consumoRealMedido / factorTotal;
-  const nuevoConsumoBase = (consumoBaseActual * 0.8) + (consumoBaseImplicito * 0.2);
+  const nuevoConsumoBase = (consumoBaseActual * 0.7) + (consumoBaseImplicito * 0.3);
   return Math.round(Math.min(Math.max(nuevoConsumoBase, 15), 60) * 10) / 10;
 }

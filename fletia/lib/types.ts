@@ -18,6 +18,7 @@ export interface Camion {
 
 export interface NuevoCamion {
   patente: string;
+  patente_semi?: string;
   marca: string;
   modelo: string;
   anio: number;

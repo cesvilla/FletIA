@@ -58,18 +58,53 @@ html, body {
   background: #0d0b09;
   overflow: hidden;
 }
+@keyframes glow-pulse {
+  0%, 100% { opacity: 1; transform: translateX(-50%) scaleX(1); }
+  50%       { opacity: 0.7; transform: translateX(-50%) scaleX(1.08); }
+}
+
 .horizon-glow {
   position: absolute;
-  bottom: -120px;
-  left: 50%;
+  bottom: -60px;
+  left: 60%;
   transform: translateX(-50%);
-  width: 900px;
-  height: 400px;
-  background: radial-gradient(ellipse at center, rgba(235,75,21,0.18) 0%, transparent 70%);
+  width: 1200px;
+  height: 500px;
+  background: radial-gradient(ellipse at center, rgba(235,75,21,0.22) 0%, rgba(235,75,21,0.06) 45%, transparent 70%);
   border-radius: 50%;
+  animation: glow-pulse 3.8s ease-in-out infinite;
 }
 
 /* ── Imagen de fondo camión ── */
+
+/* Movimiento de ruta: deriva horizontal suave de derecha a izquierda */
+@keyframes truck-travel {
+  0%   { transform: scale(1.08) translateX(3%); }
+  100% { transform: scale(1.08) translateX(-3%); }
+}
+
+/* Brillo pulsante como cambios de luz en la ruta */
+@keyframes truck-light {
+  0%   { filter: grayscale(1) brightness(0.80); }
+  35%  { filter: grayscale(1) brightness(0.95); }
+  65%  { filter: grayscale(1) brightness(0.85); }
+  100% { filter: grayscale(1) brightness(0.80); }
+}
+
+/* Líneas de asfalto pasando */
+@keyframes road-lines {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-240px); }
+}
+
+/* Líneas de velocidad (speed lines) */
+@keyframes speed-lines {
+  0%   { transform: translateX(100vw); opacity: 0; }
+  10%  { opacity: 0.25; }
+  90%  { opacity: 0.25; }
+  100% { transform: translateX(-100vw); opacity: 0; }
+}
+
 .truck-bg {
   position: fixed;
   inset: 0;
@@ -77,24 +112,71 @@ html, body {
   pointer-events: none;
   overflow: hidden;
 }
+
+/* Imagen cubre toda la pantalla */
 .truck-bg img {
   position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  opacity: 0.14;
+  transform-origin: center center;
+  animation:
+    truck-travel 22s ease-in-out infinite alternate,
+    truck-light  5s ease-in-out infinite;
+}
+
+/* Líneas de asfalto en la base */
+.truck-bg::before {
+  content: '';
+  position: absolute;
   bottom: 0;
-  right: -60px;
-  width: 680px;
-  max-width: 55vw;
-  opacity: 0.07;
-  filter: grayscale(1);
-  object-fit: contain;
+  left: -240px;
+  right: 0;
+  height: 4px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(235,75,21,0.22) 0px,
+    rgba(235,75,21,0.22) 80px,
+    transparent 80px,
+    transparent 160px
+  );
+  animation: road-lines 0.9s linear infinite;
+}
+
+/* Viñeta oscura en bordes para enfocar el contenido */
+.truck-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.55) 100%),
+    linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, transparent 35%, transparent 65%, rgba(0,0,0,0.45) 100%);
+}
+
+/* Responsive — cel */
+@media (max-width: 600px) {
+  .truck-bg img {
+    object-position: 70% center;
+    opacity: 0.11;
+  }
+}
+
+/* Reducir movimiento si el usuario lo prefiere */
+@media (prefers-reduced-motion: reduce) {
+  .truck-bg img { animation: none; }
+  .truck-bg::before { animation: none; }
 }
 
 /* ── Shell (contenedor principal) ── */
 .shell {
   position: relative;
   z-index: 1;
-  max-width: 1100px;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 clamp(24px, 5vw, 80px);
 }
 
 /* ── Navegación ── */
@@ -342,16 +424,24 @@ html, body {
 .feat-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1px;
+  gap: 16px;
   background: rgba(240,237,232,0.08);
-  border: 1px solid rgba(240,237,232,0.08);
   border-radius: 14px;
-  overflow: hidden;
 }
 .feat {
   background: #100f0e;
   padding: 28px 24px;
   position: relative;
+  border: 1.5px solid transparent;
+  border-radius: 14px;
+  transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+  cursor: default;
+}
+.feat:hover {
+  border-color: #eb4b15;
+  transform: scale(1.035);
+  box-shadow: 0 0 24px rgba(235,75,21,0.18);
+  z-index: 2;
 }
 .feat.amber { background: #1a0f06; }
 .feat .num {
@@ -679,7 +769,6 @@ footer {
   .how { grid-template-columns: 1fr; gap: 36px; }
   .plans { grid-template-columns: 1fr; max-width: 420px; margin: 0 auto; }
   .section-head { flex-direction: column; gap: 12px; }
-  .truck-bg img { max-width: 80vw; opacity: 0.05; }
 }
 @media (max-width: 600px) {
   .feat-grid { grid-template-columns: 1fr; }
