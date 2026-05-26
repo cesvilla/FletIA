@@ -98,8 +98,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Polyline inválida' }, { status: 400 });
     }
 
-    // Tomar hasta 5 puntos equidistantes de la ruta (origen, ~25%, ~50%, ~75%, destino)
-    const PUNTOS = Math.min(5, polyline.length);
+    // Tomar hasta 8 puntos equidistantes; la deduplicación por nombre limita lo que se muestra
+    const PUNTOS = Math.min(8, polyline.length);
     const muestras = muestrarPuntos(polyline, PUNTOS);
 
     // Consultar clima y geocode en paralelo para todos los puntos
@@ -147,11 +147,20 @@ export async function POST(request: Request) {
       })
     );
 
-    const puntos = resultados.filter(Boolean);
+    // Filtrar nulos y deduplicar por nombre (evitar "Jujuy, Jujuy, Jujuy")
+    const todosValidos = resultados.filter(Boolean) as NonNullable<typeof resultados[0]>[];
+    const vistos = new Set<string>();
+    const puntos = todosValidos.filter(p => {
+      // Normalizar nombre para comparar (quitar tildes, lowercase)
+      const clave = p.nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      if (vistos.has(clave)) return false;
+      vistos.add(clave);
+      return true;
+    });
 
     // Factor climático máximo de toda la ruta (el peor tramo manda)
-    const factorMaximo = puntos.reduce((max, p) => Math.max(max, p!.factorImpacto), 0);
-    const alertas = puntos.filter(p => p!.factorImpacto > 0);
+    const factorMaximo = puntos.reduce((max, p) => Math.max(max, p.factorImpacto), 0);
+    const alertas = puntos.filter(p => p.factorImpacto > 0);
 
     return NextResponse.json({
       puntos,
