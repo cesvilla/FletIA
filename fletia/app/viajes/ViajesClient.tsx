@@ -139,7 +139,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
       fetch('/api/clima-ruta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ polyline: data.polyline }),
+        body: JSON.stringify({ polyline: data.polyline, km: data.km }),
       })
         .then(r => r.json())
         .then(c => { if (c.puntos) setClimaRuta(c); })
@@ -188,7 +188,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
         fetch('/api/clima-ruta', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ polyline: mapaData.polyline }),
+          body: JSON.stringify({ polyline: mapaData.polyline, km: mapaData.km }),
         })
           .then(r => r.json())
           .then(c => { if (c.puntos) setClimaRuta(c); })

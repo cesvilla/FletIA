@@ -43,21 +43,40 @@ function muestrarPuntos(polyline: [number, number][], n: number): [number, numbe
   return puntos;
 }
 
-// Geocodificación inversa para obtener ciudad/provincia del punto
-async function reversGeocode(lat: number, lon: number): Promise<string> {
+// Geocodificación inversa adaptativa según distancia del viaje
+// - Ruta larga (>200km): muestra provincia  (zoom 6)
+// - Ruta media (80-200km): muestra ciudad + provincia (zoom 8)
+// - Ruta corta (<80km): muestra departamento/ciudad (zoom 10)
+async function reversGeocode(lat: number, lon: number, km: number): Promise<string> {
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=10&addressdetails=1`;
+    // Zoom según distancia: larga=provincia, corta=ciudad
+    const zoom = km > 200 ? 6 : km > 80 ? 8 : 10;
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=${zoom}&addressdetails=1`;
     const res = await fetch(url, {
       headers: { 'User-Agent': 'FletIA/1.0 (fletia@gmail.com)' },
     });
     if (!res.ok) return `${lat.toFixed(1)}, ${lon.toFixed(1)}`;
     const data = await res.json();
     const addr = data.address;
-    const ciudad = addr?.city || addr?.town || addr?.village || addr?.county || addr?.state_district;
     const provincia = addr?.state;
+
+    if (km > 200) {
+      // Ruta larga: mostrar solo provincia
+      return provincia || data.display_name?.split(',')[0] || 'En ruta';
+    }
+
+    if (km > 80) {
+      // Ruta media: ciudad + provincia
+      const ciudad = addr?.city || addr?.town || addr?.county || addr?.state_district;
+      if (ciudad && provincia && ciudad !== provincia) return `${ciudad}, ${provincia}`;
+      return provincia || ciudad || 'En ruta';
+    }
+
+    // Ruta corta: departamento/ciudad con detalle
+    const ciudad = addr?.city || addr?.town || addr?.village || addr?.county || addr?.state_district;
     if (ciudad && provincia) return `${ciudad}, ${provincia}`;
-    if (provincia) return provincia;
-    return data.display_name?.split(',').slice(0, 2).join(',') ?? 'En ruta';
+    return ciudad || provincia || 'En ruta';
+
   } catch {
     return 'En ruta';
   }
@@ -65,7 +84,7 @@ async function reversGeocode(lat: number, lon: number): Promise<string> {
 
 export async function POST(request: Request) {
   try {
-    const { polyline } = await request.json();
+    const { polyline, km = 0 } = await request.json();
 
     if (!polyline || !Array.isArray(polyline) || polyline.length < 2) {
       return NextResponse.json({ error: 'Polyline inválida' }, { status: 400 });
@@ -84,7 +103,7 @@ export async function POST(request: Request) {
             `&current=temperature_2m,precipitation,windspeed_10m,weathercode` +
             `&timezone=America%2FArgentina%2FBuenos_Aires`
           ),
-          reversGeocode(lat, lon),
+          reversGeocode(lat, lon, km),
         ]);
 
         if (!climaRes.ok) return null;
