@@ -79,12 +79,19 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   const [animando, setAnimando] = useState(false);
   const [modalIA, setModalIA] = useState<string | null>(null);
   const [climaRuta, setClimaRuta] = useState<{
-    puntos: { nombre: string; temp: number; lluvia: number; viento: number; condicion: string; emoji: string; factorImpacto: number; impactoPct: number }[];
+    puntos: { lat: number; lon: number; nombre: string; temp: number; lluvia: number; viento: number; condicion: string; emoji: string; factorImpacto: number; impactoPct: number }[];
     factorMaximo: number;
     impactoMaximoPct: number;
     tieneAlertas: boolean;
   } | null>(null);
   const [loadingClima, setLoadingClima] = useState(false);
+  const [climaDetalle, setClimaDetalle] = useState<{
+    nombre: string;
+    lat: number;
+    lon: number;
+    dias: { fecha: string; diaSemana: string; emoji: string; condicion: string; maxTemp: number; minTemp: number; lluvia: number; viento: number; impactoPct: number }[];
+  } | null>(null);
+  const [loadingDetalle, setLoadingDetalle] = useState(false);
   const resultadoRef = useRef<HTMLDivElement>(null);
 
   const [form, setForm] = useState({
@@ -193,6 +200,69 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     } finally {
       setLoading(false);
     }
+  }
+
+  async function verDetalleClima(punto: { lat: number; lon: number; nombre: string }) {
+    setLoadingDetalle(true);
+    setClimaDetalle(null);
+    try {
+      const WMO: Record<number, { label: string; emoji: string; factor: number }> = {
+        0:  { label: 'Despejado', emoji: '☀️', factor: 0 },
+        1:  { label: 'Mayormente despejado', emoji: '🌤️', factor: 0 },
+        2:  { label: 'Parcialmente nublado', emoji: '⛅', factor: 0 },
+        3:  { label: 'Nublado', emoji: '☁️', factor: 0 },
+        45: { label: 'Niebla', emoji: '🌫️', factor: 0.05 },
+        51: { label: 'Llovizna', emoji: '🌦️', factor: 0.03 },
+        53: { label: 'Llovizna mod.', emoji: '🌦️', factor: 0.05 },
+        61: { label: 'Lluvia leve', emoji: '🌧️', factor: 0.05 },
+        63: { label: 'Lluvia moderada', emoji: '🌧️', factor: 0.08 },
+        65: { label: 'Lluvia intensa', emoji: '🌧️', factor: 0.12 },
+        71: { label: 'Nieve leve', emoji: '🌨️', factor: 0.10 },
+        73: { label: 'Nieve moderada', emoji: '❄️', factor: 0.15 },
+        80: { label: 'Chaparrones', emoji: '🌦️', factor: 0.07 },
+        81: { label: 'Chaparrones mod.', emoji: '🌧️', factor: 0.10 },
+        95: { label: 'Tormenta', emoji: '⛈️', factor: 0.15 },
+        96: { label: 'Tormenta c/granizo', emoji: '⛈️', factor: 0.18 },
+      };
+      const getDia = (iso: string) => {
+        const d = new Date(iso + 'T12:00:00');
+        return ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][d.getDay()];
+      };
+      const formatFecha = (iso: string) => {
+        const [,m,d] = iso.split('-');
+        return `${d}/${m}`;
+      };
+      const res = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${punto.lat}&longitude=${punto.lon}` +
+        `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max` +
+        `&timezone=America%2FArgentina%2FBuenos_Aires&forecast_days=4`
+      );
+      const data = await res.json();
+      const daily = data.daily;
+      const dias = daily.time.map((fecha: string, i: number) => {
+        const code = daily.weathercode[i];
+        const wmo = WMO[code] ?? { label: 'Variable', emoji: '🌡️', factor: 0 };
+        const viento = daily.windspeed_10m_max[i];
+        let factorViento = 0;
+        if (viento > 80) factorViento = 0.15;
+        else if (viento > 50) factorViento = 0.08;
+        else if (viento > 30) factorViento = 0.03;
+        const factor = Math.min(wmo.factor + factorViento, 0.25);
+        return {
+          fecha: formatFecha(fecha),
+          diaSemana: getDia(fecha),
+          emoji: wmo.emoji,
+          condicion: wmo.label,
+          maxTemp: Math.round(daily.temperature_2m_max[i]),
+          minTemp: Math.round(daily.temperature_2m_min[i]),
+          lluvia: Math.round(daily.precipitation_sum[i] * 10) / 10,
+          viento: Math.round(viento),
+          impactoPct: Math.round(factor * 100),
+        };
+      });
+      setClimaDetalle({ nombre: punto.nombre, lat: punto.lat, lon: punto.lon, dias });
+    } catch {}
+    finally { setLoadingDetalle(false); }
   }
 
   async function handleConfirmar() {
@@ -778,49 +848,11 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
 
                     {/* Clima en ruta — preview bajo el mapa */}
                     {(loadingClima || climaRuta) && !resultado && (
-                      <div style={{ border: '1px solid rgba(26,23,20,0.1)', background: '#f8f8f6', padding: '12px' }}>
-                        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '8px' }}>
-                          🌤️ {loadingClima ? 'Consultando clima en ruta...' : 'Clima actual en la ruta'}
-                        </div>
-                        {loadingClima && (
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            {[1,2,3,4,5].map(i => (
-                              <div key={i} style={{ flex: 1, height: 50, background: '#e8e3db', borderRadius: 6 }} />
-                            ))}
-                          </div>
-                        )}
-                        {climaRuta && !loadingClima && (
-                          <>
-                            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${climaRuta.puntos.length}, 1fr)`, gap: 6 }}>
-                              {climaRuta.puntos.map((p, i) => (
-                                <div key={i} style={{
-                                  background: p.impactoPct > 0 ? '#fff8f0' : '#fff',
-                                  border: `1px solid ${p.impactoPct > 0 ? '#f5a623' : 'rgba(0,0,0,0.08)'}`,
-                                  borderRadius: 6, padding: '8px 6px', textAlign: 'center',
-                                }}>
-                                  <div style={{ fontSize: 18 }}>{p.emoji}</div>
-                                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', fontWeight: 700 }}>{p.temp}°C</div>
-                                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '7px', color: '#8a8278' }}>{p.condicion}</div>
-                                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '7px', color: '#8a8278' }}>💨 {p.viento}km/h</div>
-                                  {p.impactoPct > 0 && (
-                                    <div style={{ marginTop: 4, background: '#f5a623', borderRadius: 3, padding: '1px 3px', fontFamily: 'DM Mono, monospace', fontSize: '7px', fontWeight: 700, color: '#fff' }}>
-                                      +{p.impactoPct}%
-                                    </div>
-                                  )}
-                                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '7px', color: '#bbb', marginTop: 3, lineHeight: 1.2 }}>
-                                    {p.nombre.split(',')[0]}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                            {climaRuta.tieneAlertas && (
-                              <div style={{ marginTop: 8, padding: '6px 10px', background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 4, fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#856404' }}>
-                                ⚠️ Clima adverso detectado — puede impactar +{climaRuta.impactoMaximoPct}% en el cálculo
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
+                      <ClimaWidget
+                        loading={loadingClima}
+                        climaRuta={climaRuta}
+                        onVerDetalle={verDetalleClima}
+                      />
                     )}
 
                     {/* Km y Peso */}
@@ -1041,105 +1073,13 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       <p className="text-sm" style={{ color: '#4a4540', lineHeight: '1.6' }}>{resultado.descripcion}</p>
                     </div>
 
-                    {/* Clima en ruta */}
-                    {loadingClima && (
-                      <div className="p-4 bg-white border border-gray-200">
-                        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '8px' }}>
-                          🌤️ Consultando clima de la ruta...
-                        </div>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          {[1,2,3,4,5].map(i => (
-                            <div key={i} style={{ flex: 1, height: 60, background: '#f0ede8', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {climaRuta && (
-                      <div className="p-4 bg-white border border-gray-200">
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px' }}>
-                            🌤️ Clima en ruta
-                          </div>
-                          {climaRuta.tieneAlertas && (
-                            <div style={{
-                              background: '#fff3cd', border: '1px solid #ffc107',
-                              borderRadius: 4, padding: '2px 8px',
-                              fontFamily: 'DM Mono, monospace', fontSize: '9px',
-                              color: '#856404', letterSpacing: '1px',
-                            }}>
-                              ⚠️ +{climaRuta.impactoMaximoPct}% COMBUSTIBLE
-                            </div>
-                          )}
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${climaRuta.puntos.length}, 1fr)`, gap: 8 }}>
-                          {climaRuta.puntos.map((p, i) => (
-                            <div key={i} style={{
-                              background: p.impactoPct > 0 ? '#fff8f0' : '#f8f8f6',
-                              border: `1px solid ${p.impactoPct > 0 ? '#f5a623' : 'rgba(0,0,0,0.08)'}`,
-                              borderRadius: 8,
-                              padding: '10px 8px',
-                              textAlign: 'center',
-                            }}>
-                              <div style={{ fontSize: 22, marginBottom: 4 }}>{p.emoji}</div>
-                              <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', fontWeight: 700, color: '#1a1714', marginBottom: 2 }}>
-                                {p.temp}°C
-                              </div>
-                              <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', color: '#8a8278', marginBottom: 4, lineHeight: 1.3 }}>
-                                {p.condicion}
-                              </div>
-                              <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', color: '#8a8278', marginBottom: 2 }}>
-                                💨 {p.viento} km/h
-                              </div>
-                              {p.lluvia > 0 && (
-                                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', color: '#5b8dd9' }}>
-                                  🌧️ {p.lluvia} mm
-                                </div>
-                              )}
-                              {p.impactoPct > 0 && (
-                                <div style={{
-                                  marginTop: 6,
-                                  background: '#f5a623',
-                                  borderRadius: 3,
-                                  padding: '1px 4px',
-                                  fontFamily: 'DM Mono, monospace',
-                                  fontSize: '8px',
-                                  fontWeight: 700,
-                                  color: '#fff',
-                                }}>
-                                  +{p.impactoPct}% comb.
-                                </div>
-                              )}
-                              <div style={{
-                                marginTop: 6,
-                                fontFamily: 'DM Mono, monospace',
-                                fontSize: '7px',
-                                color: '#aaa',
-                                lineHeight: 1.2,
-                              }}>
-                                {p.nombre.split(',')[0]}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        {climaRuta.tieneAlertas && (
-                          <div style={{
-                            marginTop: 10,
-                            padding: '8px 12px',
-                            background: '#fff3cd',
-                            border: '1px solid #ffc107',
-                            borderRadius: 6,
-                            fontFamily: 'DM Mono, monospace',
-                            fontSize: '10px',
-                            color: '#856404',
-                            lineHeight: 1.5,
-                          }}>
-                            ⚠️ Las condiciones climáticas actuales pueden incrementar el consumo de combustible hasta un <strong>+{climaRuta.impactoMaximoPct}%</strong> en los tramos afectados.
-                          </div>
-                        )}
-                      </div>
+                    {/* Clima en ruta — en resultado */}
+                    {(loadingClima || climaRuta) && (
+                      <ClimaWidget
+                        loading={loadingClima}
+                        climaRuta={climaRuta}
+                        onVerDetalle={verDetalleClima}
+                      />
                     )}
 
                     {/* Factores aplicados */}
@@ -1270,6 +1210,66 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
             >
               Listo
             </button>
+          </div>
+        </div>
+      )}
+      {/* Modal detalle clima 4 días */}
+      {(climaDetalle || loadingDetalle) && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1100, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={() => setClimaDetalle(null)}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ background: 'linear-gradient(135deg, #1a6b9a, #2196f3)', padding: '20px 20px 16px', position: 'relative' }}>
+              <button onClick={() => setClimaDetalle(null)} style={{ position: 'absolute', top: 12, right: 14, background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', color: '#fff', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+              <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: 'rgba(255,255,255,0.7)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 4 }}>🌤️ Pronóstico 4 días</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '18px', fontWeight: 700, color: '#fff' }}>
+                {climaDetalle?.nombre.split(',').slice(0, 2).join(',')}
+              </div>
+            </div>
+
+            {loadingDetalle && (
+              <div style={{ padding: 32, textAlign: 'center', fontFamily: 'DM Mono, monospace', fontSize: 12, color: '#8a8278' }}>
+                Cargando pronóstico...
+              </div>
+            )}
+
+            {climaDetalle && !loadingDetalle && (
+              <div style={{ padding: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                  {climaDetalle.dias.map((d, i) => (
+                    <div key={i} style={{
+                      background: d.impactoPct > 0 ? '#fff8f0' : '#f8f9fa',
+                      border: `1px solid ${d.impactoPct > 0 ? '#f5a623' : '#e0e0e0'}`,
+                      borderRadius: 12, padding: '14px 8px', textAlign: 'center',
+                    }}>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 700, color: '#1a1714', marginBottom: 2 }}>{i === 0 ? 'Hoy' : d.diaSemana}</div>
+                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#8a8278', marginBottom: 8 }}>{d.fecha}</div>
+                      <div style={{ fontSize: 32, marginBottom: 8 }}>{d.emoji}</div>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#8a8278', marginBottom: 6, lineHeight: 1.3 }}>{d.condicion}</div>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
+                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 15, fontWeight: 700, color: '#e53935' }}>{d.maxTemp}°</span>
+                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 15, color: '#5b8dd9' }}>{d.minTemp}°</span>
+                      </div>
+                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#8a8278', marginBottom: 3 }}>💨 {d.viento} km/h</div>
+                      {d.lluvia > 0 && <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#5b8dd9', marginBottom: 3 }}>🌧️ {d.lluvia} mm</div>}
+                      {d.impactoPct > 0 && (
+                        <div style={{ marginTop: 6, background: '#f5a623', borderRadius: 4, padding: '3px 6px', fontFamily: 'DM Mono, monospace', fontSize: 10, fontWeight: 700, color: '#fff' }}>
+                          +{d.impactoPct}% comb.
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 12, padding: '10px 14px', background: '#f0f7ff', borderRadius: 8, fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#1a6b9a', lineHeight: 1.6 }}>
+                  📍 Datos provistos por Open-Meteo · Actualizado en tiempo real
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1473,5 +1473,99 @@ function LitrosRealesForm({ viajeId, onAprendido }: { viajeId: string; onAprendi
         ¿Cuánto cargaste realmente?
       </span>
     </form>
+  );
+}
+
+// ─── Componente ClimaWidget ───────────────────────────────────────────────────
+type PuntoClima = {
+  lat: number; lon: number; nombre: string;
+  temp: number; lluvia: number; viento: number;
+  condicion: string; emoji: string;
+  factorImpacto: number; impactoPct: number;
+};
+type ClimaRutaData = {
+  puntos: PuntoClima[];
+  factorMaximo: number; impactoMaximoPct: number; tieneAlertas: boolean;
+};
+
+function ClimaWidget({ loading, climaRuta, onVerDetalle }: {
+  loading: boolean;
+  climaRuta: ClimaRutaData | null;
+  onVerDetalle: (p: { lat: number; lon: number; nombre: string }) => void;
+}) {
+  return (
+    <div style={{ border: '1px solid rgba(26,23,20,0.12)', background: '#fff', borderRadius: 8, overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ padding: '10px 14px', background: '#f0f7ff', borderBottom: '1px solid rgba(26,23,20,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', fontWeight: 700, color: '#1a6b9a', textTransform: 'uppercase', letterSpacing: '2px' }}>
+          🌤️ {loading ? 'Consultando clima en ruta...' : 'Clima actual en la ruta'}
+        </div>
+        {climaRuta?.tieneAlertas && (
+          <div style={{ background: '#ff9800', borderRadius: 4, padding: '3px 10px', fontFamily: 'DM Mono, monospace', fontSize: '10px', fontWeight: 700, color: '#fff' }}>
+            ⚠️ +{climaRuta.impactoMaximoPct}% COMBUSTIBLE
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: 12 }}>
+        {loading && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
+            {[1,2,3,4,5].map(i => (
+              <div key={i} style={{ height: 90, background: '#f0f0f0', borderRadius: 8 }} />
+            ))}
+          </div>
+        )}
+
+        {climaRuta && !loading && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${climaRuta.puntos.length},1fr)`, gap: 8 }}>
+              {climaRuta.puntos.map((p, i) => (
+                <button
+                  key={i}
+                  onClick={() => onVerDetalle(p)}
+                  style={{
+                    background: p.impactoPct > 0 ? '#fff8f0' : '#f8f9fa',
+                    border: `1.5px solid ${p.impactoPct > 0 ? '#f5a623' : '#e0e0e0'}`,
+                    borderRadius: 10, padding: '12px 6px', textAlign: 'center',
+                    cursor: 'pointer', transition: 'transform 0.15s, box-shadow 0.15s',
+                    fontFamily: 'inherit',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 12px rgba(0,0,0,0.12)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'none'; (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none'; }}
+                  title={`Ver pronóstico de ${p.nombre}`}
+                >
+                  <div style={{ fontSize: 26, marginBottom: 5 }}>{p.emoji}</div>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 15, fontWeight: 800, color: '#1a1714', marginBottom: 3 }}>{p.temp}°C</div>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#555', marginBottom: 5, lineHeight: 1.3 }}>{p.condicion}</div>
+                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#777', marginBottom: p.lluvia > 0 ? 2 : 0 }}>💨 {p.viento} km/h</div>
+                  {p.lluvia > 0 && <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#5b8dd9', marginBottom: 2 }}>🌧️ {p.lluvia} mm</div>}
+                  {p.impactoPct > 0 && (
+                    <div style={{ marginTop: 5, background: '#f5a623', borderRadius: 4, padding: '2px 5px', fontFamily: 'DM Mono, monospace', fontSize: 10, fontWeight: 700, color: '#fff' }}>
+                      +{p.impactoPct}% comb.
+                    </div>
+                  )}
+                  <div style={{ marginTop: 6, fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#1a6b9a', lineHeight: 1.2 }}>
+                    {p.nombre.split(',')[0]}
+                  </div>
+                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#aaa', marginTop: 3 }}>
+                    Tap p/ pronóstico →
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {climaRuta.tieneAlertas ? (
+              <div style={{ marginTop: 10, padding: '8px 12px', background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#856404', lineHeight: 1.5 }}>
+                ⚠️ Hay condiciones climáticas adversas en la ruta que pueden incrementar el consumo hasta <strong>+{climaRuta.impactoMaximoPct}%</strong>. Hacé click en cada ciudad para ver el pronóstico de 4 días.
+              </div>
+            ) : (
+              <div style={{ marginTop: 10, padding: '8px 12px', background: '#f1f8f1', border: '1px solid #c8e6c9', borderRadius: 6, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#2e7d32' }}>
+                ✅ Sin condiciones climáticas adversas en la ruta. Hacé click en cada ciudad para ver el pronóstico de 4 días.
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   );
 }
