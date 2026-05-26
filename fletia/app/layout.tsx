@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import WhatsAppButton from './components/WhatsAppButton';
+import SupportChat from './components/SupportChat';
 
 export const metadata: Metadata = {
   title: 'FletIA — Combustible inteligente para tu flota',
@@ -22,6 +23,7 @@ export default function RootLayout({
       <body>
         {children}
         <WhatsAppButton />
+        <SupportChat />
       </body>
     </html>
   );
