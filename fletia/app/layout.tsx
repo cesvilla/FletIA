@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import WhatsAppButton from './components/WhatsAppButton';
 import SupportChat from './components/SupportChat';
 
 export const metadata: Metadata = {
@@ -22,7 +21,6 @@ export default function RootLayout({
       </head>
       <body>
         {children}
-        <WhatsAppButton />
         <SupportChat />
       </body>
     </html>
