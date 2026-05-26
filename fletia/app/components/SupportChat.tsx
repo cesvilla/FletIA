@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 
 // Reemplazá CRISP_WEBSITE_ID con tu ID de Crisp
 // Settings → Website Settings → Integration → Website ID
-const CRISP_WEBSITE_ID = 'REEMPLAZAR_CON_TU_ID';
+const CRISP_WEBSITE_ID = '50a9c756-6d22-4ce7-b1f0-42dc3d5187db';
 
 declare global {
   interface Window {
