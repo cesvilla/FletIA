@@ -133,7 +133,18 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
       if (!res.ok) throw new Error(data.error || 'Error al calcular distancia');
       setForm(p => ({ ...p, kilometros: String(data.km) }));
       setMapaData({ polyline: data.polyline, origen: data.origen, destino: data.destino, km: data.km });
+      // Cargar clima apenas se traza la ruta
       setClimaRuta(null);
+      setLoadingClima(true);
+      fetch('/api/clima-ruta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ polyline: data.polyline, km: data.km }),
+      })
+        .then(r => r.json())
+        .then(c => { if (c.puntos) setClimaRuta(c); })
+        .catch(() => {})
+        .finally(() => setLoadingClima(false));
     } catch (err: any) {
       setErrorKm(err.message);
     } finally {
@@ -215,7 +226,15 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
         95: { label: 'Tormenta eléctrica', emoji: '⛈️', factor: 0.15 },
         96: { label: 'Tormenta con granizo', emoji: '⛈️', factor: 0.18 },
       };
-      const getWMO = (code: number) => WMO[code] ?? { label: 'Variable', emoji: '🌡️', factor: 0 };
+      const getWMO = (code: number, isDay = 1) => {
+        const w = WMO[code] ?? { label: 'Variable', emoji: '🌡️', factor: 0 };
+        if (!isDay) {
+          if (code === 0) return { ...w, emoji: '🌙' };
+          if (code === 1) return { ...w, emoji: '🌛' };
+          if (code === 2 || code === 3) return { ...w, emoji: '☁️' };
+        }
+        return w;
+      };
       const getDia = (iso: string) => ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][new Date(iso + 'T12:00:00').getDay()];
       const formatFecha = (iso: string) => { const [,m,d] = iso.split('-'); return `${d}/${m}`; };
       const getImpacto = (code: number, viento: number) => {
@@ -227,8 +246,8 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
 
       const res = await fetch(
         `https://api.open-meteo.com/v1/forecast?latitude=${punto.lat}&longitude=${punto.lon}` +
-        `&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,precipitation,relativehumidity_2m` +
-        `&hourly=temperature_2m,weathercode,precipitation_probability` +
+        `&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,precipitation,relativehumidity_2m,is_day` +
+        `&hourly=temperature_2m,weathercode,precipitation_probability,is_day` +
         `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,precipitation_probability_max` +
         `&timezone=America%2FArgentina%2FBuenos_Aires&forecast_days=5`
       );
@@ -236,7 +255,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
 
       // Ahora
       const cur = data.current;
-      const ahoraWMO = getWMO(cur.weathercode);
+      const ahoraWMO = getWMO(cur.weathercode, cur.is_day);
       const ahora = {
         temp: Math.round(cur.temperature_2m),
         sensacion: Math.round(cur.apparent_temperature),
@@ -256,7 +275,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
         return {
           hora: horaLabel,
           temp: Math.round(data.hourly.temperature_2m[idx]),
-          emoji: getWMO(data.hourly.weathercode[idx]).emoji,
+          emoji: getWMO(data.hourly.weathercode[idx], data.hourly.is_day?.[idx] ?? 1).emoji,
           prob: data.hourly.precipitation_probability[idx] ?? 0,
         };
       });
