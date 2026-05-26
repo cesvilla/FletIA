@@ -1,7 +1,7 @@
 'use client';
 
 const WA_NUMBER = '543816421849';
-const WA_MESSAGE = encodeURIComponent('Hola! Necesito soporte con FletIA 👋');
+const WA_MESSAGE = encodeURIComponent('Hola! 👋 Necesito ayuda con FletIA. ¿Podrían asistirme?');
 
 export default function WhatsAppButton() {
   return (

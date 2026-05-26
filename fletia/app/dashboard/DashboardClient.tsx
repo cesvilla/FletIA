@@ -9,11 +9,11 @@ interface Precio { empresa: string; tipo: string; precio: number; provincia?: st
 
 interface Props {
   email: string; empresa: string; userId: string;
-  gastoMes: number; totalViajes: number; totalCamiones: number;
+  gastoMes: number; gananciasMes: number; totalViajes: number; totalCamiones: number;
   recordatorios: Recordatorio[]; precios: Precio[];
 }
 
-export default function DashboardClient({ email, empresa, userId, gastoMes, totalViajes, totalCamiones, recordatorios: initRecs, precios }: Props) {
+export default function DashboardClient({ email, empresa, userId, gastoMes, gananciasMes, totalViajes, totalCamiones, recordatorios: initRecs, precios }: Props) {
   const router = useRouter();
   const supabase = createClient();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -77,10 +77,32 @@ export default function DashboardClient({ email, empresa, userId, gastoMes, tota
 
   const iniciales = empresa.split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase() || 'TE';
   const kpis = [
-    { label: 'Gasto del mes', value: gastoMes > 0 ? `$${gastoMes.toLocaleString('es-AR')}` : '—', sub: gastoMes > 0 ? 'Este mes' : 'Sin viajes aún' },
-    { label: 'Viajes calculados', value: totalViajes.toString(), sub: totalViajes > 0 ? 'Total histórico' : 'Empezá ahora' },
-    { label: 'Camiones activos', value: totalCamiones.toString(), sub: totalCamiones > 0 ? 'En tu flota' : 'Agregá tu flota' },
-    { label: 'Precio gasoil hoy', value: precios.length > 0 ? `$${precios[0].precio.toLocaleString('es-AR')}` : '—', sub: precios.length > 0 ? `YPF · ${new Date().toLocaleDateString('es-AR')}` : 'Actualizando...' },
+    {
+      label: 'Gasto del mes',
+      value: gastoMes > 0 ? `$${gastoMes.toLocaleString('es-AR')}` : '—',
+      sub: gastoMes > 0 ? 'Este mes' : 'Sin viajes aún',
+      color: '#e53935',       // rojo claro
+      bgColor: '#fff5f5',
+    },
+    {
+      label: 'Ganancias del mes',
+      value: gananciasMes > 0 ? `$${gananciasMes.toLocaleString('es-AR')}` : '—',
+      sub: gananciasMes > 0 ? 'Este mes' : 'Sin ingresos cargados',
+      color: '#2e7d32',       // verde claro
+      bgColor: '#f1f8f1',
+    },
+    {
+      label: 'Viajes calculados',
+      value: totalViajes.toString(),
+      sub: totalViajes > 0 ? 'Total histórico' : 'Empezá ahora',
+      color: null, bgColor: null,
+    },
+    {
+      label: 'Camiones activos',
+      value: totalCamiones.toString(),
+      sub: totalCamiones > 0 ? 'En tu flota' : 'Agregá tu flota',
+      color: null, bgColor: null,
+    },
   ];
 
   const preciosPorEmpresa = precios.reduce((acc: Record<string, Precio[]>, p) => {
@@ -140,14 +162,27 @@ export default function DashboardClient({ email, empresa, userId, gastoMes, tota
           <div className="bg-card border border-ink/10 p-6 md:p-8 mb-6">
             <div className="font-mono text-[10px] tracking-[3px] text-accent uppercase mb-3">// Bienvenido a FletIA</div>
             <h1 className="font-display text-4xl md:text-5xl font-black tracking-tight mb-3 leading-none text-ink">Hola, <span className="text-accent">{empresa}</span> 👋</h1>
-            <p className="text-ink-2 text-base max-w-2xl">Aquí tenés un resumen de tu operación de hoy.</p>
+            <p className="text-ink-2 text-base max-w-2xl">Aquí tenés un resumen de tus operaciones.</p>
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             {kpis.map((kpi, i) => (
-              <div key={i} className="bg-card border border-ink/10 p-4 md:p-5">
-                <div className="font-mono text-[9px] tracking-[2px] text-ink-3 uppercase mb-2">{kpi.label}</div>
-                <div className="font-display text-2xl md:text-3xl font-bold leading-none mb-1.5 text-ink">{kpi.value}</div>
+              <div
+                key={i}
+                className="p-4 md:p-5"
+                style={{
+                  backgroundColor: kpi.bgColor || 'var(--color-card, #fff)',
+                  border: `1px solid ${kpi.color ? kpi.color + '30' : 'rgba(0,0,0,0.08)'}`,
+                }}
+              >
+                <div
+                  className="font-mono text-[9px] tracking-[2px] uppercase mb-2"
+                  style={{ color: kpi.color ? kpi.color + 'bb' : undefined }}
+                >{kpi.label}</div>
+                <div
+                  className="font-display text-2xl md:text-3xl font-bold leading-none mb-1.5"
+                  style={{ color: kpi.color || undefined }}
+                >{kpi.value}</div>
                 <div className="font-mono text-[9px] text-ink-3">{kpi.sub}</div>
               </div>
             ))}

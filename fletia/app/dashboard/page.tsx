@@ -18,7 +18,7 @@ export default async function DashboardPage() {
     { data: recordatorios },
     { data: precios },
   ] = await Promise.all([
-    supabase.from('viajes').select('costo_total').eq('user_id', user.id).gte('created_at', firstOfMonth),
+    supabase.from('viajes').select('costo_total, precio_flete').eq('user_id', user.id).gte('created_at', firstOfMonth),
     supabase.from('viajes').select('id').eq('user_id', user.id),
     supabase.from('camiones').select('id').eq('user_id', user.id).eq('activo', true),
     supabase.from('recordatorios').select('*').eq('user_id', user.id).eq('completado', false).order('fecha', { ascending: true }),
@@ -26,6 +26,7 @@ export default async function DashboardPage() {
   ]);
 
   const gastoMes = viajesMes?.reduce((acc, v) => acc + (v.costo_total || 0), 0) || 0;
+  const gananciasMes = viajesMes?.reduce((acc, v) => acc + (v.precio_flete || 0), 0) || 0;
   const totalViajes = viajesTotal?.length || 0;
   const totalCamiones = camiones?.length || 0;
 
@@ -35,6 +36,7 @@ export default async function DashboardPage() {
       empresa={empresa}
       userId={user.id}
       gastoMes={gastoMes}
+      gananciasMes={gananciasMes}
       totalViajes={totalViajes}
       totalCamiones={totalCamiones}
       recordatorios={recordatorios || []}
