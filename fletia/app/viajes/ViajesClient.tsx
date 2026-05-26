@@ -87,9 +87,10 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   const [loadingClima, setLoadingClima] = useState(false);
   const [climaDetalle, setClimaDetalle] = useState<{
     nombre: string;
-    lat: number;
-    lon: number;
-    dias: { fecha: string; diaSemana: string; emoji: string; condicion: string; maxTemp: number; minTemp: number; lluvia: number; viento: number; impactoPct: number }[];
+    lat: number; lon: number;
+    ahora: { temp: number; sensacion: number; condicion: string; emoji: string; humedad: number; viento: number; lluvia: number };
+    horas: { hora: string; temp: number; emoji: string; prob: number }[];
+    dias: { fecha: string; diaSemana: string; emoji: string; condicion: string; maxTemp: number; minTemp: number; lluvia: number; viento: number; probLluvia: number; impactoPct: number }[];
   } | null>(null);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
   const resultadoRef = useRef<HTMLDivElement>(null);
@@ -208,60 +209,89 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     try {
       const WMO: Record<number, { label: string; emoji: string; factor: number }> = {
         0:  { label: 'Despejado', emoji: '☀️', factor: 0 },
-        1:  { label: 'Mayormente despejado', emoji: '🌤️', factor: 0 },
+        1:  { label: 'Mayormente soleado', emoji: '🌤️', factor: 0 },
         2:  { label: 'Parcialmente nublado', emoji: '⛅', factor: 0 },
         3:  { label: 'Nublado', emoji: '☁️', factor: 0 },
         45: { label: 'Niebla', emoji: '🌫️', factor: 0.05 },
-        51: { label: 'Llovizna', emoji: '🌦️', factor: 0.03 },
-        53: { label: 'Llovizna mod.', emoji: '🌦️', factor: 0.05 },
+        48: { label: 'Niebla con escarcha', emoji: '🌫️', factor: 0.07 },
+        51: { label: 'Llovizna leve', emoji: '🌦️', factor: 0.03 },
+        53: { label: 'Llovizna moderada', emoji: '🌦️', factor: 0.05 },
         61: { label: 'Lluvia leve', emoji: '🌧️', factor: 0.05 },
         63: { label: 'Lluvia moderada', emoji: '🌧️', factor: 0.08 },
         65: { label: 'Lluvia intensa', emoji: '🌧️', factor: 0.12 },
         71: { label: 'Nieve leve', emoji: '🌨️', factor: 0.10 },
         73: { label: 'Nieve moderada', emoji: '❄️', factor: 0.15 },
         80: { label: 'Chaparrones', emoji: '🌦️', factor: 0.07 },
-        81: { label: 'Chaparrones mod.', emoji: '🌧️', factor: 0.10 },
-        95: { label: 'Tormenta', emoji: '⛈️', factor: 0.15 },
-        96: { label: 'Tormenta c/granizo', emoji: '⛈️', factor: 0.18 },
+        81: { label: 'Chaparrones moderados', emoji: '🌧️', factor: 0.10 },
+        95: { label: 'Tormenta eléctrica', emoji: '⛈️', factor: 0.15 },
+        96: { label: 'Tormenta con granizo', emoji: '⛈️', factor: 0.18 },
       };
-      const getDia = (iso: string) => {
-        const d = new Date(iso + 'T12:00:00');
-        return ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][d.getDay()];
+      const getWMO = (code: number) => WMO[code] ?? { label: 'Variable', emoji: '🌡️', factor: 0 };
+      const getDia = (iso: string) => ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][new Date(iso + 'T12:00:00').getDay()];
+      const formatFecha = (iso: string) => { const [,m,d] = iso.split('-'); return `${d}/${m}`; };
+      const getImpacto = (code: number, viento: number) => {
+        const w = getWMO(code);
+        let fv = 0;
+        if (viento > 80) fv = 0.15; else if (viento > 50) fv = 0.08; else if (viento > 30) fv = 0.03;
+        return Math.round(Math.min(w.factor + fv, 0.25) * 100);
       };
-      const formatFecha = (iso: string) => {
-        const [,m,d] = iso.split('-');
-        return `${d}/${m}`;
-      };
+
       const res = await fetch(
         `https://api.open-meteo.com/v1/forecast?latitude=${punto.lat}&longitude=${punto.lon}` +
-        `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max` +
-        `&timezone=America%2FArgentina%2FBuenos_Aires&forecast_days=4`
+        `&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,precipitation,relativehumidity_2m` +
+        `&hourly=temperature_2m,weathercode,precipitation_probability` +
+        `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,precipitation_probability_max` +
+        `&timezone=America%2FArgentina%2FBuenos_Aires&forecast_days=5`
       );
       const data = await res.json();
-      const daily = data.daily;
-      const dias = daily.time.map((fecha: string, i: number) => {
-        const code = daily.weathercode[i];
-        const wmo = WMO[code] ?? { label: 'Variable', emoji: '🌡️', factor: 0 };
-        const viento = daily.windspeed_10m_max[i];
-        let factorViento = 0;
-        if (viento > 80) factorViento = 0.15;
-        else if (viento > 50) factorViento = 0.08;
-        else if (viento > 30) factorViento = 0.03;
-        const factor = Math.min(wmo.factor + factorViento, 0.25);
+
+      // Ahora
+      const cur = data.current;
+      const ahoraWMO = getWMO(cur.weathercode);
+      const ahora = {
+        temp: Math.round(cur.temperature_2m),
+        sensacion: Math.round(cur.apparent_temperature),
+        condicion: ahoraWMO.label,
+        emoji: ahoraWMO.emoji,
+        humedad: Math.round(cur.relativehumidity_2m),
+        viento: Math.round(cur.windspeed_10m),
+        lluvia: Math.round(cur.precipitation * 10) / 10,
+      };
+
+      // Próximas 6 horas (desde hora actual)
+      const ahora_iso = cur.time as string; // "2026-05-26T14:00"
+      const hIdx = data.hourly.time.findIndex((t: string) => t >= ahora_iso);
+      const horas = data.hourly.time.slice(hIdx, hIdx + 6).map((t: string, i: number) => {
+        const idx = hIdx + i;
+        const horaLabel = i === 0 ? 'Ahora' : t.split('T')[1].substring(0, 5);
         return {
-          fecha: formatFecha(fecha),
-          diaSemana: getDia(fecha),
-          emoji: wmo.emoji,
-          condicion: wmo.label,
-          maxTemp: Math.round(daily.temperature_2m_max[i]),
-          minTemp: Math.round(daily.temperature_2m_min[i]),
-          lluvia: Math.round(daily.precipitation_sum[i] * 10) / 10,
-          viento: Math.round(viento),
-          impactoPct: Math.round(factor * 100),
+          hora: horaLabel,
+          temp: Math.round(data.hourly.temperature_2m[idx]),
+          emoji: getWMO(data.hourly.weathercode[idx]).emoji,
+          prob: data.hourly.precipitation_probability[idx] ?? 0,
         };
       });
-      setClimaDetalle({ nombre: punto.nombre, lat: punto.lat, lon: punto.lon, dias });
-    } catch {}
+
+      // 5 días
+      const dias = data.daily.time.map((fecha: string, i: number) => {
+        const code = data.daily.weathercode[i];
+        const viento = data.daily.windspeed_10m_max[i];
+        return {
+          fecha: formatFecha(fecha),
+          diaSemana: i === 0 ? 'Hoy' : getDia(fecha),
+          emoji: getWMO(code).emoji,
+          condicion: getWMO(code).label,
+          maxTemp: Math.round(data.daily.temperature_2m_max[i]),
+          minTemp: Math.round(data.daily.temperature_2m_min[i]),
+          lluvia: Math.round(data.daily.precipitation_sum[i] * 10) / 10,
+          viento: Math.round(viento),
+          probLluvia: data.daily.precipitation_probability_max[i] ?? 0,
+          impactoPct: getImpacto(code, viento),
+        };
+      });
+
+      setClimaDetalle({ nombre: punto.nombre, lat: punto.lat, lon: punto.lon, ahora, horas, dias });
+    } catch (e) { console.error(e); }
     finally { setLoadingDetalle(false); }
   }
 
@@ -1213,62 +1243,108 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
           </div>
         </div>
       )}
-      {/* Modal detalle clima 4 días */}
+      {/* Modal detalle clima estilo Google Weather */}
       {(climaDetalle || loadingDetalle) && (
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 1100, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-          onClick={() => setClimaDetalle(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 1100, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={() => { setClimaDetalle(null); setLoadingDetalle(false); }}
         >
           <div
-            style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden' }}
+            style={{ background: '#1c2033', borderRadius: 20, width: '100%', maxWidth: 420, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 80px rgba(0,0,0,0.6)', fontFamily: 'Inter, sans-serif' }}
             onClick={e => e.stopPropagation()}
           >
-            {/* Header */}
-            <div style={{ background: 'linear-gradient(135deg, #1a6b9a, #2196f3)', padding: '20px 20px 16px', position: 'relative' }}>
-              <button onClick={() => setClimaDetalle(null)} style={{ position: 'absolute', top: 12, right: 14, background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', color: '#fff', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-              <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: 'rgba(255,255,255,0.7)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 4 }}>🌤️ Pronóstico 4 días</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '18px', fontWeight: 700, color: '#fff' }}>
-                {climaDetalle?.nombre.split(',').slice(0, 2).join(',')}
-              </div>
-            </div>
-
             {loadingDetalle && (
-              <div style={{ padding: 32, textAlign: 'center', fontFamily: 'DM Mono, monospace', fontSize: 12, color: '#8a8278' }}>
+              <div style={{ padding: 48, textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>
                 Cargando pronóstico...
               </div>
             )}
 
             {climaDetalle && !loadingDetalle && (
-              <div style={{ padding: 16 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+              <>
+                {/* Header — Ahora */}
+                <div style={{ padding: '24px 24px 16px', background: 'linear-gradient(180deg, #1e3a5f 0%, #1c2033 100%)', borderRadius: '20px 20px 0 0', position: 'relative' }}>
+                  <button onClick={() => setClimaDetalle(null)} style={{ position: 'absolute', top: 14, right: 16, background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', color: '#fff', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+
+                  <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 2 }}>
+                    📍 {climaDetalle.nombre.split(',').slice(0, 2).join(',')}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 16, fontFamily: 'DM Mono, monospace', letterSpacing: 1 }}>CLIMA</div>
+
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 64, fontWeight: 300, color: '#fff', lineHeight: 1 }}>{climaDetalle.ahora.temp}°</span>
+                        <span style={{ fontSize: 52 }}>{climaDetalle.ahora.emoji}</span>
+                      </div>
+                      <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 4 }}>Sensación térmica de {climaDetalle.ahora.sensacion}°</div>
+                    </div>
+                    <div style={{ textAlign: 'right', paddingTop: 8 }}>
+                      <div style={{ color: '#fff', fontSize: 16, fontWeight: 600 }}>{climaDetalle.ahora.condicion}</div>
+                    </div>
+                  </div>
+
+                  {/* Horas */}
+                  <div style={{ marginTop: 20, display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
+                    {climaDetalle.horas.map((h, i) => (
+                      <div key={i} style={{ minWidth: 58, textAlign: 'center', background: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: '10px 6px', flexShrink: 0 }}>
+                        <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 15, fontWeight: 700, marginBottom: 6 }}>{h.temp}°</div>
+                        <div style={{ fontSize: 22, marginBottom: 6 }}>{h.emoji}</div>
+                        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>{h.hora}</div>
+                        {h.prob > 0 && <div style={{ color: '#64b5f6', fontSize: 10, marginTop: 2 }}>{h.prob}%</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 5 días */}
+                <div style={{ padding: '4px 0' }}>
                   {climaDetalle.dias.map((d, i) => (
                     <div key={i} style={{
-                      background: d.impactoPct > 0 ? '#fff8f0' : '#f8f9fa',
-                      border: `1px solid ${d.impactoPct > 0 ? '#f5a623' : '#e0e0e0'}`,
-                      borderRadius: 12, padding: '14px 8px', textAlign: 'center',
+                      display: 'flex', alignItems: 'center', padding: '12px 20px',
+                      borderBottom: i < climaDetalle.dias.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                      background: i === 0 ? 'rgba(255,255,255,0.07)' : 'transparent',
+                      borderRadius: i === 0 ? 0 : 0,
                     }}>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 700, color: '#1a1714', marginBottom: 2 }}>{i === 0 ? 'Hoy' : d.diaSemana}</div>
-                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#8a8278', marginBottom: 8 }}>{d.fecha}</div>
-                      <div style={{ fontSize: 32, marginBottom: 8 }}>{d.emoji}</div>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#8a8278', marginBottom: 6, lineHeight: 1.3 }}>{d.condicion}</div>
-                      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
-                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 15, fontWeight: 700, color: '#e53935' }}>{d.maxTemp}°</span>
-                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 15, color: '#5b8dd9' }}>{d.minTemp}°</span>
-                      </div>
-                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#8a8278', marginBottom: 3 }}>💨 {d.viento} km/h</div>
-                      {d.lluvia > 0 && <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#5b8dd9', marginBottom: 3 }}>🌧️ {d.lluvia} mm</div>}
+                      <div style={{ width: 40, color: '#fff', fontSize: 13, fontWeight: i === 0 ? 700 : 400 }}>{d.diaSemana}</div>
+                      <div style={{ fontSize: 24, marginRight: 10 }}>{d.emoji}</div>
+                      <div style={{ flex: 1, color: 'rgba(255,255,255,0.55)', fontSize: 12 }}>{d.condicion}</div>
                       {d.impactoPct > 0 && (
-                        <div style={{ marginTop: 6, background: '#f5a623', borderRadius: 4, padding: '3px 6px', fontFamily: 'DM Mono, monospace', fontSize: 10, fontWeight: 700, color: '#fff' }}>
-                          +{d.impactoPct}% comb.
+                        <div style={{ background: '#f57c00', borderRadius: 4, padding: '2px 6px', fontSize: 10, fontWeight: 700, color: '#fff', marginRight: 8 }}>
+                          +{d.impactoPct}%
                         </div>
                       )}
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{d.maxTemp}°</span>
+                        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>{d.minTemp}°</span>
+                      </div>
                     </div>
                   ))}
                 </div>
-                <div style={{ marginTop: 12, padding: '10px 14px', background: '#f0f7ff', borderRadius: 8, fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#1a6b9a', lineHeight: 1.6 }}>
-                  📍 Datos provistos por Open-Meteo · Actualizado en tiempo real
+
+                {/* Info extra */}
+                <div style={{ margin: '8px 16px 16px', borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  {[
+                    { icon: '🌧️', label: 'Precipitaciones', val: `${climaDetalle.dias[0].probLluvia} %` },
+                    { icon: '💨', label: 'Viento', val: `${climaDetalle.ahora.viento} km/h` },
+                    { icon: '💧', label: 'Humedad', val: `${climaDetalle.ahora.humedad} %` },
+                  ].map((item, i, arr) => (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: 14,
+                      padding: '14px 16px',
+                      borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                      background: 'rgba(255,255,255,0.04)',
+                    }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{item.icon}</div>
+                      <div style={{ flex: 1, color: '#fff', fontSize: 14, fontWeight: 500 }}>{item.label}</div>
+                      <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 600 }}>{item.val}</div>
+                    </div>
+                  ))}
                 </div>
-              </div>
+
+                <div style={{ textAlign: 'center', paddingBottom: 16, fontFamily: 'DM Mono, monospace', fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>
+                  Open-Meteo · Datos en tiempo real
+                </div>
+              </>
             )}
           </div>
         </div>
