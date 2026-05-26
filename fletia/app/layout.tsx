@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import WhatsAppButton from './components/WhatsAppButton';
 
 export const metadata: Metadata = {
   title: 'FletIA — Combustible inteligente para tu flota',
@@ -18,7 +19,10 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <WhatsAppButton />
+      </body>
     </html>
   );
 }
