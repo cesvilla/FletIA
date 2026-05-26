@@ -21,6 +21,9 @@ export default function DashboardClient({ email, empresa, userId, gastoMes, tota
   const [nuevoRec, setNuevoRec] = useState('');
   const [fechaRec, setFechaRec] = useState('');
   const [addingRec, setAddingRec] = useState(false);
+  const [editingRec, setEditingRec] = useState<string | null>(null);
+  const [editTexto, setEditTexto] = useState('');
+  const [editFecha, setEditFecha] = useState('');
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -52,6 +55,24 @@ export default function DashboardClient({ email, empresa, userId, gastoMes, tota
   async function completarRecordatorio(id: string) {
     await supabase.from('recordatorios').update({ completado: true }).eq('id', id);
     setRecs(recs.filter(r => r.id !== id));
+  }
+
+  async function eliminarRecordatorio(id: string) {
+    await supabase.from('recordatorios').delete().eq('id', id);
+    setRecs(recs.filter(r => r.id !== id));
+  }
+
+  function iniciarEdicion(r: Recordatorio) {
+    setEditingRec(r.id);
+    setEditTexto(r.texto);
+    setEditFecha(r.fecha ?? '');
+  }
+
+  async function guardarEdicion(id: string) {
+    if (!editTexto.trim()) return;
+    await supabase.from('recordatorios').update({ texto: editTexto.trim(), fecha: editFecha || null }).eq('id', id);
+    setRecs(recs.map(r => r.id === id ? { ...r, texto: editTexto.trim(), fecha: editFecha || undefined } : r));
+    setEditingRec(null);
   }
 
   const iniciales = empresa.split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase() || 'TE';
@@ -201,12 +222,49 @@ export default function DashboardClient({ email, empresa, userId, gastoMes, tota
               ) : (
                 <div className="space-y-2">
                   {recs.map(r => (
-                    <div key={r.id} className="flex items-start gap-3 p-3 border border-ink/10 hover:bg-surface/50 transition-colors">
-                      <button onClick={() => completarRecordatorio(r.id)} className="mt-0.5 w-4 h-4 border-2 border-ink/30 rounded-sm flex-shrink-0 hover:border-accent hover:bg-accent/10 transition-colors" title="Marcar completado" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm text-ink">{r.texto}</div>
-                        {r.fecha && <div className="font-mono text-[9px] text-ink-3 mt-0.5">📅 {new Date(r.fecha + 'T00:00:00').toLocaleDateString('es-AR')}</div>}
-                      </div>
+                    <div key={r.id} className="border border-ink/10 hover:bg-surface/50 transition-colors">
+                      {editingRec === r.id ? (
+                        <div className="p-3">
+                          <input
+                            type="text"
+                            value={editTexto}
+                            onChange={e => setEditTexto(e.target.value)}
+                            className="w-full text-sm px-3 py-2 border border-ink/20 bg-white text-ink mb-2 outline-none"
+                            onKeyDown={e => e.key === 'Enter' && guardarEdicion(r.id)}
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <input
+                              type="date"
+                              value={editFecha}
+                              onChange={e => setEditFecha(e.target.value)}
+                              className="text-xs px-2 py-1.5 border border-ink/20 bg-white text-ink outline-none flex-1"
+                            />
+                            <button onClick={() => guardarEdicion(r.id)} className="bg-accent text-white px-3 py-1.5 text-xs font-bold hover:bg-accent/90">Guardar</button>
+                            <button onClick={() => setEditingRec(null)} className="px-3 py-1.5 text-xs border border-ink/20 text-ink-2 hover:bg-surface">Cancelar</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-3 p-3">
+                          <button onClick={() => completarRecordatorio(r.id)} className="mt-0.5 w-4 h-4 border-2 border-ink/30 rounded-sm flex-shrink-0 hover:border-accent hover:bg-accent/10 transition-colors" title="Marcar completado" />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm text-ink">{r.texto}</div>
+                            {r.fecha && <div className="font-mono text-[9px] text-ink-3 mt-0.5">📅 {new Date(r.fecha + 'T00:00:00').toLocaleDateString('es-AR')}</div>}
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0 ml-1">
+                            <button
+                              onClick={() => iniciarEdicion(r)}
+                              className="w-6 h-6 flex items-center justify-center text-ink-3 hover:text-accent hover:bg-accent/10 rounded transition-colors text-xs"
+                              title="Editar"
+                            >✏️</button>
+                            <button
+                              onClick={() => eliminarRecordatorio(r.id)}
+                              className="w-6 h-6 flex items-center justify-center text-ink-3 hover:text-red-500 hover:bg-red-50 rounded transition-colors font-bold text-sm"
+                              title="Eliminar"
+                            >×</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
