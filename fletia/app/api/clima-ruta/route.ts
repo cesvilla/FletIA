@@ -26,8 +26,16 @@ const WMO_CODES: Record<number, { label: string; emoji: string; factor: number }
   99: { label: 'Tormenta con granizo fuerte', emoji: '🌩️', factor: 0.20 },
 };
 
-function getWMO(code: number) {
-  return WMO_CODES[code] ?? { label: 'Variable', emoji: '🌡️', factor: 0 };
+function getWMO(code: number, isDay = 1) {
+  const wmo = WMO_CODES[code] ?? { label: 'Variable', emoji: '🌡️', factor: 0 };
+  if (!isDay) {
+    // Reemplazar emojis diurnos por nocturnos
+    if (code === 0) return { ...wmo, emoji: '🌙' };
+    if (code === 1) return { ...wmo, emoji: '🌛' };
+    if (code === 2) return { ...wmo, emoji: '☁️' };
+    if (code === 3) return { ...wmo, emoji: '☁️' };
+  }
+  return wmo;
 }
 
 // Extraer N puntos equidistantes de la polyline
@@ -100,7 +108,7 @@ export async function POST(request: Request) {
         const [climaRes, nombre] = await Promise.all([
           fetch(
             `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-            `&current=temperature_2m,precipitation,windspeed_10m,weathercode` +
+            `&current=temperature_2m,precipitation,windspeed_10m,weathercode,is_day` +
             `&timezone=America%2FArgentina%2FBuenos_Aires`
           ),
           reversGeocode(lat, lon, km),
@@ -110,7 +118,8 @@ export async function POST(request: Request) {
         const climaData = await climaRes.json();
         const current = climaData.current;
 
-        const wmo = getWMO(current.weathercode);
+        const isDay = current.is_day as number;
+        const wmo = getWMO(current.weathercode, isDay);
         const viento = current.windspeed_10m as number;
         const lluvia = current.precipitation as number;
         const temp = current.temperature_2m as number;

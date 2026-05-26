@@ -133,18 +133,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
       if (!res.ok) throw new Error(data.error || 'Error al calcular distancia');
       setForm(p => ({ ...p, kilometros: String(data.km) }));
       setMapaData({ polyline: data.polyline, origen: data.origen, destino: data.destino, km: data.km });
-      // Pre-cargar clima apenas se traza la ruta
       setClimaRuta(null);
-      setLoadingClima(true);
-      fetch('/api/clima-ruta', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ polyline: data.polyline, km: data.km }),
-      })
-        .then(r => r.json())
-        .then(c => { if (c.puntos) setClimaRuta(c); })
-        .catch(() => {})
-        .finally(() => setLoadingClima(false));
     } catch (err: any) {
       setErrorKm(err.message);
     } finally {
