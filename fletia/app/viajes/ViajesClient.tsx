@@ -102,6 +102,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   } | null>(null);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
   const resultadoRef = useRef<HTMLDivElement>(null);
+  const rightColumnRef = useRef<HTMLDivElement>(null);
 
   const [form, setForm] = useState({
     camion_id: '',
@@ -141,6 +142,10 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
       if (!res.ok) throw new Error(data.error || 'Error al calcular distancia');
       setForm(p => ({ ...p, kilometros: String(data.km) }));
       setMapaData({ polyline: data.polyline, origen: data.origen, destino: data.destino, km: data.km });
+      // Scroll a la columna derecha para mostrar clima y tráfico
+      setTimeout(() => {
+        rightColumnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 200);
       // Cargar clima y tráfico apenas se traza la ruta
       setClimaRuta(null);
       setTraficoRuta(null);
@@ -204,7 +209,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
       setClimaRuta(null);
       setTraficoRuta(null);
       setTimeout(() => {
-        resultadoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        resultadoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 150);
 
       // Consultar clima y tráfico de la ruta si hay polyline disponible
@@ -928,22 +933,6 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       </div>
                     )}
 
-                    {/* Clima en ruta — preview bajo el mapa */}
-                    {(loadingClima || climaRuta) && !resultado && (
-                      <ClimaWidget
-                        loading={loadingClima}
-                        climaRuta={climaRuta}
-                        onVerDetalle={verDetalleClima}
-                      />
-                    )}
-
-                    {/* Tráfico en ruta — preview bajo el mapa */}
-                    {(loadingTrafico || traficoRuta) && !resultado && (
-                      <TraficoWidget
-                        loading={loadingTrafico}
-                        traficoRuta={traficoRuta}
-                      />
-                    )}
 
                     {/* Km y Peso */}
                     <div className="grid grid-cols-2 gap-3">
@@ -1056,32 +1045,32 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                 </form>
               </div>
 
-              {/* RESULTADO */}
-              <div>
-                {!resultado && (
-                  <div className="bg-white border border-dashed border-gray-300 p-12 text-center h-full flex flex-col items-center justify-center">
+              {/* COLUMNA DERECHA — resultado + clima + tráfico */}
+              <div ref={rightColumnRef} className="space-y-4">
+
+                {/* Estado vacío: solo se muestra si no hay nada todavía */}
+                {!resultado && !loadingClima && !climaRuta && !loadingTrafico && !traficoRuta && (
+                  <div className="bg-white border border-dashed border-gray-300 p-12 text-center flex flex-col items-center justify-center" style={{ minHeight: 200 }}>
                     <div className="text-5xl mb-4">🧮</div>
                     <div className="text-lg font-bold mb-2">Ingresá los datos del viaje</div>
                     <div className="text-sm" style={{ color: '#8a8278' }}>La IA va a calcular el costo exacto en segundos.</div>
                   </div>
                 )}
 
+                {/* 1. RESULTADO IA */}
                 {resultado && (
                   <div className="space-y-4" ref={resultadoRef}>
 
-                    {/* Card principal del resultado */}
                     <div className="text-white p-6" style={{ backgroundColor: '#1a1714' }}>
                       <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '2px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', marginBottom: '12px' }}>
                         ✓ Resultado IA — {camionInfo?.patente} {camionInfo?.marca} {camionInfo?.modelo}
                       </div>
-
                       <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '56px', fontWeight: 900, lineHeight: 1, color: 'white', marginBottom: '4px' }}>
                         ${resultado.costoTotal.toLocaleString('es-AR')}
                       </div>
                       <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginBottom: '20px' }}>
                         costo total en combustible
                       </div>
-
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', backgroundColor: 'rgba(255,255,255,0.08)' }}>
                         {[
                           { val: `${resultado.litrosTotales} lts`, lab: 'LITROS' },
@@ -1096,24 +1085,15 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       </div>
                     </div>
 
-                    {/* Confirmar / Cancelar / Animación / Confirmado */}
+                    {/* Confirmar / Cancelar */}
                     {!confirmado && !animando && (
                       <div className="flex gap-3">
-                        <button
-                          onClick={handleConfirmar}
-                          disabled={confirmando}
-                          className="flex-1 py-3 text-white font-bold text-sm transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
-                          style={{ backgroundColor: '#1a6b3a' }}
-                        >
+                        <button onClick={handleConfirmar} disabled={confirmando} className="flex-1 py-3 text-white font-bold text-sm transition-opacity disabled:opacity-50 flex items-center justify-center gap-2" style={{ backgroundColor: '#1a6b3a' }}>
                           {confirmando ? 'Guardando...' : '✅ Confirmar viaje'}
                         </button>
-                        <button
-                          onClick={handleCancelar}
-                          className="flex-1 py-3 font-bold text-sm transition-colors"
-                          style={{ backgroundColor: 'rgba(212,68,12,0.1)', border: '1px solid rgba(212,68,12,0.35)', color: '#d4440c' }}
+                        <button onClick={handleCancelar} className="flex-1 py-3 font-bold text-sm transition-colors" style={{ backgroundColor: 'rgba(212,68,12,0.1)', border: '1px solid rgba(212,68,12,0.35)', color: '#d4440c' }}
                           onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(212,68,12,0.18)')}
-                          onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(212,68,12,0.1)')}
-                        >
+                          onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(212,68,12,0.1)')}>
                           ✕ Cancelar
                         </button>
                       </div>
@@ -1133,17 +1113,13 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                     {/* Rentabilidad */}
                     {margenNeto && (
                       <div className="p-4 border" style={{ backgroundColor: parseFloat(margenNeto) > 0 ? 'rgba(26,107,58,0.08)' : 'rgba(212,68,12,0.08)', borderColor: parseFloat(margenNeto) > 0 ? 'rgba(26,107,58,0.3)' : 'rgba(212,68,12,0.3)' }}>
-                        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '6px' }}>
-                          Rentabilidad del flete
-                        </div>
+                        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '6px' }}>Rentabilidad del flete</div>
                         <div className="flex items-center justify-between">
                           <div className="text-sm" style={{ color: '#4a4540' }}>
                             Flete: ${parseFloat(form.flete_cobrado).toLocaleString('es-AR')} · Combustible: ${resultado.costoTotal.toLocaleString('es-AR')}
                           </div>
                           <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '1px', color: colorMargen, textTransform: 'uppercase', marginBottom: '2px' }}>
-                              {gananciaNeta! >= 0 ? 'Ganancia' : 'Pérdida'}
-                            </div>
+                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '1px', color: colorMargen, textTransform: 'uppercase', marginBottom: '2px' }}>{gananciaNeta! >= 0 ? 'Ganancia' : 'Pérdida'}</div>
                             <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '36px', fontWeight: 900, color: colorMargen, lineHeight: 1 }}>
                               {gananciaNeta! >= 0 ? '' : '-'}${Math.abs(Math.round(gananciaNeta!)).toLocaleString('es-AR')}
                             </div>
@@ -1155,36 +1131,15 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       </div>
                     )}
 
-                    {/* Explicación de la IA */}
+                    {/* Explicación IA */}
                     <div className="p-4 bg-white border border-gray-200">
-                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '8px' }}>
-                        🧠 Explicación de la IA
-                      </div>
+                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '8px' }}>🧠 Explicación de la IA</div>
                       <p className="text-sm" style={{ color: '#4a4540', lineHeight: '1.6' }}>{resultado.descripcion}</p>
                     </div>
 
-                    {/* Tráfico en ruta — en resultado */}
-                    {(loadingTrafico || traficoRuta) && (
-                      <TraficoWidget
-                        loading={loadingTrafico}
-                        traficoRuta={traficoRuta}
-                      />
-                    )}
-
-                    {/* Clima en ruta — en resultado */}
-                    {(loadingClima || climaRuta) && (
-                      <ClimaWidget
-                        loading={loadingClima}
-                        climaRuta={climaRuta}
-                        onVerDetalle={verDetalleClima}
-                      />
-                    )}
-
                     {/* Factores aplicados */}
                     <div className="p-4 bg-white border border-gray-200">
-                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '12px' }}>
-                        Factores aplicados
-                      </div>
+                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '12px' }}>Factores aplicados</div>
                       <div className="space-y-2">
                         {[
                           { label: 'Factor peso de carga', val: `×${resultado.factorPeso}`, pct: resultado.porcentajeCarga },
@@ -1206,6 +1161,24 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
 
                   </div>
                 )}
+
+                {/* 2. CLIMA EN RUTA */}
+                {(loadingClima || climaRuta) && (
+                  <ClimaWidget
+                    loading={loadingClima}
+                    climaRuta={climaRuta}
+                    onVerDetalle={verDetalleClima}
+                  />
+                )}
+
+                {/* 3. TRÁFICO EN RUTA */}
+                {(loadingTrafico || traficoRuta) && (
+                  <TraficoWidget
+                    loading={loadingTrafico}
+                    traficoRuta={traficoRuta}
+                  />
+                )}
+
               </div>
             </div>
           )}
