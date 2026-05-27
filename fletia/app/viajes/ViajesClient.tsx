@@ -1605,6 +1605,7 @@ function ClimaWidget({ loading, climaRuta, onVerDetalle }: {
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${climaRuta.puntos.length},1fr)`, gap: 8 }}>
               {climaRuta.puntos.map((p, i) => (
                 <button
+                  type="button"
                   key={i}
                   onClick={() => onVerDetalle(p)}
                   style={{
