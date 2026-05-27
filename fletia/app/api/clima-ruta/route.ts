@@ -29,11 +29,10 @@ const WMO_CODES: Record<number, { label: string; emoji: string; factor: number }
 function getWMO(code: number, isDay = 1) {
   const wmo = WMO_CODES[code] ?? { label: 'Variable', emoji: '🌡️', factor: 0 };
   if (!isDay) {
-    // Reemplazar emojis diurnos por nocturnos
-    if (code === 0) return { ...wmo, emoji: '🌙' };
-    if (code === 1) return { ...wmo, emoji: '🌛' };
-    if (code === 2) return { ...wmo, emoji: '☁️' };
-    if (code === 3) return { ...wmo, emoji: '☁️' };
+    if (code === 0) return { ...wmo, emoji: '🌙', label: 'Despejado' };
+    if (code === 1) return { ...wmo, emoji: '🌛', label: 'Mayormente despejado' };
+    if (code === 2) return { ...wmo, emoji: '☁️', label: 'Parcialmente nublado' };
+    if (code === 3) return { ...wmo, emoji: '☁️', label: 'Nublado' };
   }
   return wmo;
 }

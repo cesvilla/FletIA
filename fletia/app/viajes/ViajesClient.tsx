@@ -229,9 +229,10 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
       const getWMO = (code: number, isDay = 1) => {
         const w = WMO[code] ?? { label: 'Variable', emoji: '🌡️', factor: 0 };
         if (!isDay) {
-          if (code === 0) return { ...w, emoji: '🌙' };
-          if (code === 1) return { ...w, emoji: '🌛' };
-          if (code === 2 || code === 3) return { ...w, emoji: '☁️' };
+          if (code === 0) return { ...w, emoji: '🌙', label: 'Despejado' };
+          if (code === 1) return { ...w, emoji: '🌛', label: 'Mayormente despejado' };
+          if (code === 2) return { ...w, emoji: '☁️', label: 'Parcialmente nublado' };
+          if (code === 3) return { ...w, emoji: '☁️', label: 'Nublado' };
         }
         return w;
       };
