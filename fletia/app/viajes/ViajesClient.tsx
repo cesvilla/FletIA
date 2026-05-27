@@ -256,7 +256,11 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
 
       // Ahora
       const cur = data.current;
-      const ahoraWMO = getWMO(cur.weathercode, Number(cur.is_day));
+      // is_day: usar el valor de la API; si no está, deducir por hora local (6-20 = día)
+      const isDayCur: number = cur.is_day !== undefined && cur.is_day !== null
+        ? Number(cur.is_day)
+        : (() => { const h = new Date().getHours(); return h >= 6 && h < 20 ? 1 : 0; })();
+      const ahoraWMO = getWMO(cur.weathercode, isDayCur);
       const ahora = {
         temp: Math.round(cur.temperature_2m),
         sensacion: Math.round(cur.apparent_temperature),
@@ -276,7 +280,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
         return {
           hora: horaLabel,
           temp: Math.round(data.hourly.temperature_2m[idx]),
-          emoji: getWMO(data.hourly.weathercode[idx], Number(data.hourly.is_day?.[idx] ?? 1)).emoji,
+          emoji: getWMO(data.hourly.weathercode[idx], data.hourly.is_day ? Number(data.hourly.is_day[idx]) : (Number(t.split('T')[1]?.substring(0,2)) >= 6 && Number(t.split('T')[1]?.substring(0,2)) < 20 ? 1 : 0)).emoji,
           prob: data.hourly.precipitation_probability[idx] ?? 0,
         };
       });
