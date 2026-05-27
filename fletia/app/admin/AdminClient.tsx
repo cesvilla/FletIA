@@ -8,6 +8,7 @@ interface Acceso {
   empresa: string;
   aprobado: boolean;
   dias_demo: number;
+  tipo: string;
   fecha_aprobacion: string | null;
   fecha_expiracion: string | null;
   created_at: string;
@@ -17,6 +18,7 @@ export default function AdminClient() {
   const [accesos, setAccesos] = useState<Acceso[]>([]);
   const [loading, setLoading] = useState(true);
   const [dias, setDias] = useState<Record<string, string>>({});
+  const [tipos, setTipos] = useState<Record<string, string>>({});
   const [procesando, setProcesando] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<{ texto: string; tipo: 'ok' | 'error' } | null>(null);
 
@@ -32,11 +34,12 @@ export default function AdminClient() {
 
   async function aprobar(user_id: string) {
     const d = dias[user_id] || '15';
+    const t = tipos[user_id] || 'demo';
     setProcesando(user_id);
     const res = await fetch('/api/admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id, dias: parseInt(d) }),
+      body: JSON.stringify({ user_id, dias: parseInt(d), tipo: t }),
     });
     const data = await res.json();
     if (data.ok) {
@@ -149,7 +152,15 @@ export default function AdminClient() {
                         Registrado: {formatFecha(a.created_at)}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <select
+                        value={tipos[a.user_id] ?? 'demo'}
+                        onChange={e => setTipos(p => ({ ...p, [a.user_id]: e.target.value }))}
+                        style={{ padding: '6px 8px', border: '1px solid rgba(26,23,20,0.2)', backgroundColor: '#f0ede8', fontFamily: 'DM Mono, monospace', fontSize: 11, outline: 'none', color: tipos[a.user_id] === 'cliente' ? '#1a6b3a' : '#c8860a', fontWeight: 700 }}
+                      >
+                        <option value="demo">🧪 Demo</option>
+                        <option value="cliente">⭐ Cliente</option>
+                      </select>
                       <input
                         type="number"
                         min={1} max={365}
@@ -184,8 +195,11 @@ export default function AdminClient() {
                     <div style={{ flex: 1, minWidth: 200 }}>
                       <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1714' }}>{a.empresa || '(sin empresa)'}</div>
                       <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#8a8278', marginTop: 2 }}>{a.email}</div>
-                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#aaa', marginTop: 2 }}>
-                        Vence: {formatFecha(a.fecha_expiracion)}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                        <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#aaa' }}>Vence: {formatFecha(a.fecha_expiracion)}</span>
+                        <span style={{ padding: '1px 7px', borderRadius: 3, fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono, monospace', backgroundColor: a.tipo === 'cliente' ? 'rgba(26,107,58,0.1)' : 'rgba(200,134,10,0.1)', color: a.tipo === 'cliente' ? '#1a6b3a' : '#c8860a' }}>
+                          {a.tipo === 'cliente' ? '⭐ cliente' : '🧪 demo'}
+                        </span>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -195,10 +209,18 @@ export default function AdminClient() {
                         </div>
                         <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#8a8278' }}>restantes</div>
                       </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <select
+                          value={tipos[a.user_id] ?? (a.tipo || 'demo')}
+                          onChange={e => setTipos(p => ({ ...p, [a.user_id]: e.target.value }))}
+                          style={{ padding: '5px 7px', border: '1px solid rgba(26,23,20,0.2)', backgroundColor: '#f0ede8', fontFamily: 'DM Mono, monospace', fontSize: 10, outline: 'none' }}
+                        >
+                          <option value="demo">🧪 Demo</option>
+                          <option value="cliente">⭐ Cliente</option>
+                        </select>
                         <input
                           type="number" min={1} max={365}
-                          value={dias[a.user_id] ?? '15'}
+                          value={dias[a.user_id] ?? '30'}
                           onChange={e => setDias(p => ({ ...p, [a.user_id]: e.target.value }))}
                           style={{ width: 54, padding: '5px 6px', border: '1px solid rgba(26,23,20,0.2)', backgroundColor: '#f0ede8', fontFamily: 'DM Mono, monospace', fontSize: 11, textAlign: 'center', outline: 'none' }}
                         />

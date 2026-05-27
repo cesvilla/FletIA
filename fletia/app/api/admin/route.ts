@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   const admin_user = await verificarAdmin();
   if (!admin_user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-  const { user_id, dias } = await request.json();
+  const { user_id, dias, tipo } = await request.json();
   if (!user_id || !dias) return NextResponse.json({ error: 'Faltan datos' }, { status: 400 });
 
   const fecha_expiracion = new Date();
@@ -48,6 +48,7 @@ export async function POST(request: Request) {
     .update({
       aprobado: true,
       dias_demo: Number(dias),
+      tipo: tipo || 'demo',
       fecha_aprobacion: new Date().toISOString(),
       fecha_expiracion: fecha_expiracion.toISOString(),
     })
