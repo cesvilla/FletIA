@@ -26,9 +26,9 @@ const WMO_CODES: Record<number, { label: string; emoji: string; factor: number }
   99: { label: 'Tormenta con granizo fuerte', emoji: '🌩️', factor: 0.20 },
 };
 
-function getWMO(code: number, isDay = 1) {
+function getWMO(code: number, isDay: number | undefined = 1) {
   const wmo = WMO_CODES[code] ?? { label: 'Variable', emoji: '🌡️', factor: 0 };
-  if (!isDay) {
+  if (isDay === 0) {
     if (code === 0) return { ...wmo, emoji: '🌙', label: 'Despejado' };
     if (code === 1) return { ...wmo, emoji: '🌛', label: 'Mayormente despejado' };
     if (code === 2) return { ...wmo, emoji: '☁️', label: 'Parcialmente nublado' };
@@ -117,7 +117,7 @@ export async function POST(request: Request) {
         const climaData = await climaRes.json();
         const current = climaData.current;
 
-        const isDay = current.is_day as number;
+        const isDay = Number(current.is_day);
         const wmo = getWMO(current.weathercode, isDay);
         const viento = current.windspeed_10m as number;
         const lluvia = current.precipitation as number;

@@ -226,9 +226,9 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
         95: { label: 'Tormenta eléctrica', emoji: '⛈️', factor: 0.15 },
         96: { label: 'Tormenta con granizo', emoji: '⛈️', factor: 0.18 },
       };
-      const getWMO = (code: number, isDay = 1) => {
+      const getWMO = (code: number, isDay: number | undefined = 1) => {
         const w = WMO[code] ?? { label: 'Variable', emoji: '🌡️', factor: 0 };
-        if (!isDay) {
+        if (isDay === 0) {
           if (code === 0) return { ...w, emoji: '🌙', label: 'Despejado' };
           if (code === 1) return { ...w, emoji: '🌛', label: 'Mayormente despejado' };
           if (code === 2) return { ...w, emoji: '☁️', label: 'Parcialmente nublado' };
@@ -256,7 +256,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
 
       // Ahora
       const cur = data.current;
-      const ahoraWMO = getWMO(cur.weathercode, cur.is_day);
+      const ahoraWMO = getWMO(cur.weathercode, Number(cur.is_day));
       const ahora = {
         temp: Math.round(cur.temperature_2m),
         sensacion: Math.round(cur.apparent_temperature),
@@ -276,7 +276,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
         return {
           hora: horaLabel,
           temp: Math.round(data.hourly.temperature_2m[idx]),
-          emoji: getWMO(data.hourly.weathercode[idx], data.hourly.is_day?.[idx] ?? 1).emoji,
+          emoji: getWMO(data.hourly.weathercode[idx], Number(data.hourly.is_day?.[idx] ?? 1)).emoji,
           prob: data.hourly.precipitation_probability[idx] ?? 0,
         };
       });
