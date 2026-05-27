@@ -54,10 +54,11 @@ function muestrarPuntos(polyline: [number, number][], n: number): [number, numbe
 // - Ruta larga (>200km): muestra provincia  (zoom 6)
 // - Ruta media (80-200km): muestra ciudad + provincia (zoom 8)
 // - Ruta corta (<80km): muestra departamento/ciudad (zoom 10)
-async function reversGeocode(lat: number, lon: number, km: number): Promise<string> {
+// - esExtremo=true (origen/destino): SIEMPRE zoom 10 para mostrar el lugar exacto
+async function reversGeocode(lat: number, lon: number, km: number, esExtremo = false): Promise<string> {
   try {
-    // Zoom según distancia: larga=provincia, corta=ciudad
-    const zoom = km > 200 ? 6 : km > 80 ? 8 : 10;
+    // Origen y destino siempre con máximo detalle (zoom 10) para mostrar el lugar exacto
+    const zoom = esExtremo ? 10 : km > 200 ? 6 : km > 80 ? 8 : 10;
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=${zoom}&addressdetails=1`;
     const res = await fetch(url, {
       headers: { 'User-Agent': 'FletIA/1.0 (fletia@gmail.com)' },
@@ -67,22 +68,22 @@ async function reversGeocode(lat: number, lon: number, km: number): Promise<stri
     const addr = data.address;
     const provincia = addr?.state;
 
+    // Origen/destino y rutas cortas: mostrar ciudad/departamento con detalle
+    if (esExtremo || km <= 80) {
+      const ciudad = addr?.city || addr?.town || addr?.village || addr?.county || addr?.state_district;
+      if (ciudad && provincia && ciudad !== provincia) return `${ciudad}, ${provincia}`;
+      return ciudad || provincia || 'En ruta';
+    }
+
     if (km > 200) {
-      // Ruta larga: mostrar solo provincia
+      // Ruta larga (puntos intermedios): mostrar solo provincia
       return provincia || data.display_name?.split(',')[0] || 'En ruta';
     }
 
-    if (km > 80) {
-      // Ruta media: ciudad + provincia
-      const ciudad = addr?.city || addr?.town || addr?.county || addr?.state_district;
-      if (ciudad && provincia && ciudad !== provincia) return `${ciudad}, ${provincia}`;
-      return provincia || ciudad || 'En ruta';
-    }
-
-    // Ruta corta: departamento/ciudad con detalle
-    const ciudad = addr?.city || addr?.town || addr?.village || addr?.county || addr?.state_district;
-    if (ciudad && provincia) return `${ciudad}, ${provincia}`;
-    return ciudad || provincia || 'En ruta';
+    // Ruta media (puntos intermedios): ciudad + provincia
+    const ciudad = addr?.city || addr?.town || addr?.county || addr?.state_district;
+    if (ciudad && provincia && ciudad !== provincia) return `${ciudad}, ${provincia}`;
+    return provincia || ciudad || 'En ruta';
 
   } catch {
     return 'En ruta';
@@ -103,14 +104,15 @@ export async function POST(request: Request) {
 
     // Consultar clima y geocode en paralelo para todos los puntos
     const resultados = await Promise.all(
-      muestras.map(async ([lat, lon]) => {
+      muestras.map(async ([lat, lon], idx) => {
+        const esExtremo = idx === 0 || idx === muestras.length - 1;
         const [climaRes, nombre] = await Promise.all([
           fetch(
             `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
             `&current=temperature_2m,precipitation,windspeed_10m,weathercode,is_day` +
             `&timezone=America%2FArgentina%2FBuenos_Aires`
           ),
-          reversGeocode(lat, lon, km),
+          reversGeocode(lat, lon, km, esExtremo),
         ]);
 
         if (!climaRes.ok) return null;
