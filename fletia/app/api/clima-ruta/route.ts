@@ -92,7 +92,7 @@ async function reversGeocode(lat: number, lon: number, km: number, esExtremo = f
 
 export async function POST(request: Request) {
   try {
-    const { polyline, km = 0 } = await request.json();
+    const { polyline, km = 0, origenCoord, destinoCoord } = await request.json();
 
     if (!polyline || !Array.isArray(polyline) || polyline.length < 2) {
       return NextResponse.json({ error: 'Polyline inválida' }, { status: 400 });
@@ -102,17 +102,31 @@ export async function POST(request: Request) {
     const PUNTOS = Math.min(8, polyline.length);
     const muestras = muestrarPuntos(polyline, PUNTOS);
 
+    // Reemplazar primer y último punto con coords exactas del geocodificador
+    // Esto garantiza que la temperatura corresponde a la altitud real del lugar
+    // (ej: Tafí del Valle a 2000m, no al punto de la polyline en el camino de bajada)
+    if (origenCoord?.lat && origenCoord?.lon) {
+      muestras[0] = [origenCoord.lat, origenCoord.lon];
+    }
+    if (destinoCoord?.lat && destinoCoord?.lon) {
+      muestras[muestras.length - 1] = [destinoCoord.lat, destinoCoord.lon];
+    }
+
     // Consultar clima y geocode en paralelo para todos los puntos
     const resultados = await Promise.all(
       muestras.map(async ([lat, lon], idx) => {
         const esExtremo = idx === 0 || idx === muestras.length - 1;
+        // Origen/destino: usar nombre del geocodificador directamente si está disponible
+        const nombreFijo = esExtremo
+          ? (idx === 0 ? origenCoord?.nombre : destinoCoord?.nombre) || null
+          : null;
         const [climaRes, nombre] = await Promise.all([
           fetch(
             `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
             `&current=temperature_2m,precipitation,windspeed_10m,weathercode,is_day` +
             `&timezone=America%2FArgentina%2FBuenos_Aires`
           ),
-          reversGeocode(lat, lon, km, esExtremo),
+          nombreFijo ? Promise.resolve(nombreFijo) : reversGeocode(lat, lon, km, esExtremo),
         ]);
 
         if (!climaRes.ok) return null;
