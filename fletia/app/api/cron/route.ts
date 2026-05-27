@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 
     // Email al USUARIO
     await resend.emails.send({
-      from: 'FletIA <noreply@flet-ia.com>',
+      from: 'FletIA <onboarding@resend.dev>',
       to: acceso.email,
       subject: `⏳ Tu demo de FletIA vence en ${DIAS_AVISO} días`,
       html: `
@@ -77,7 +77,7 @@ export async function GET(request: Request) {
 
     // Email al ADMIN
     await resend.emails.send({
-      from: 'FletIA <noreply@flet-ia.com>',
+      from: 'FletIA <onboarding@resend.dev>',
       to: ADMIN_EMAIL,
       subject: `🔔 FletIA — Demo por vencer: ${acceso.empresa || acceso.email}`,
       html: `
