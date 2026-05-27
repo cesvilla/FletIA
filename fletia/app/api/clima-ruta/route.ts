@@ -55,6 +55,17 @@ function muestrarPuntos(polyline: [number, number][], n: number): [number, numbe
 // - Ruta media (80-200km): muestra ciudad + provincia (zoom 8)
 // - Ruta corta (<80km): muestra departamento/ciudad (zoom 10)
 // - esExtremo=true (origen/destino): SIEMPRE zoom 10 para mostrar el lugar exacto
+// Correcciones de nombres que Nominatim devuelve mal
+const CORRECCIONES: Record<string, string> = {
+  'san salvador de tucumán': 'San Miguel de Tucumán',
+  'san salvador de tucuman': 'San Miguel de Tucumán',
+  'ciudad de tucumán': 'San Miguel de Tucumán',
+};
+
+function corregirNombre(nombre: string): string {
+  return CORRECCIONES[nombre.toLowerCase()] ?? nombre;
+}
+
 async function reversGeocode(lat: number, lon: number, km: number, esExtremo = false): Promise<string> {
   try {
     // Origen y destino siempre con máximo detalle (zoom 10) para mostrar el lugar exacto
@@ -71,19 +82,18 @@ async function reversGeocode(lat: number, lon: number, km: number, esExtremo = f
     // Origen/destino y rutas cortas: mostrar ciudad/departamento con detalle
     if (esExtremo || km <= 80) {
       const ciudad = addr?.city || addr?.town || addr?.village || addr?.county || addr?.state_district;
-      if (ciudad && provincia && ciudad !== provincia) return `${ciudad}, ${provincia}`;
-      return ciudad || provincia || 'En ruta';
+      if (ciudad && provincia && ciudad !== provincia) return corregirNombre(`${ciudad}, ${provincia}`);
+      return corregirNombre(ciudad || provincia || 'En ruta');
     }
 
     if (km > 200) {
-      // Ruta larga (puntos intermedios): mostrar solo provincia
-      return provincia || data.display_name?.split(',')[0] || 'En ruta';
+      return corregirNombre(provincia || data.display_name?.split(',')[0] || 'En ruta');
     }
 
     // Ruta media (puntos intermedios): ciudad + provincia
     const ciudad = addr?.city || addr?.town || addr?.county || addr?.state_district;
-    if (ciudad && provincia && ciudad !== provincia) return `${ciudad}, ${provincia}`;
-    return provincia || ciudad || 'En ruta';
+    if (ciudad && provincia && ciudad !== provincia) return corregirNombre(`${ciudad}, ${provincia}`);
+    return corregirNombre(provincia || ciudad || 'En ruta');
 
   } catch {
     return 'En ruta';

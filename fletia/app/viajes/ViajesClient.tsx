@@ -1654,18 +1654,20 @@ function TraficoWidget({ loading, traficoRuta }: {
 
         {traficoRuta && !loading && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${traficoRuta.segmentos.length},1fr)`, gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
               {traficoRuta.segmentos.map((s, i) => (
                 <div
                   key={i}
                   style={{
+                    flexShrink: 0,
+                    width: 110,
                     background: s.nivel === 'fluido' ? '#f0faf4'
                       : s.nivel === 'moderado' ? '#fffbf0'
                       : s.nivel === 'lento' ? '#fff5f0'
                       : '#fff0f0',
                     border: `1.5px solid ${s.color}33`,
                     borderRadius: 10,
-                    padding: '12px 6px',
+                    padding: '12px 8px',
                     textAlign: 'center',
                   }}
                 >
@@ -1792,16 +1794,18 @@ function ClimaWidget({ loading, climaRuta, onVerDetalle }: {
 
         {climaRuta && !loading && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${climaRuta.puntos.length},1fr)`, gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
               {climaRuta.puntos.map((p, i) => (
                 <button
                   type="button"
                   key={i}
                   onClick={() => onVerDetalle(p)}
                   style={{
+                    flexShrink: 0,
+                    width: 110,
                     background: p.impactoPct > 0 ? '#fff8f0' : '#f8f9fa',
                     border: `1.5px solid ${p.impactoPct > 0 ? '#f5a623' : '#e0e0e0'}`,
-                    borderRadius: 10, padding: '12px 6px', textAlign: 'center',
+                    borderRadius: 10, padding: '12px 8px', textAlign: 'center',
                     cursor: 'pointer', transition: 'transform 0.15s, box-shadow 0.15s',
                     fontFamily: 'inherit',
                   }}
