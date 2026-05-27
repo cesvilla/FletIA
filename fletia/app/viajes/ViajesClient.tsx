@@ -260,7 +260,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
         `&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,precipitation,relativehumidity_2m,is_day` +
         `&hourly=temperature_2m,weathercode,precipitation_probability,is_day` +
         `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,precipitation_probability_max` +
-        `&timezone=America%2FArgentina%2FBuenos_Aires&forecast_days=5`
+        `&timezone=America%2FArgentina%2FBuenos_Aires&forecast_days=5&models=gfs_seamless`
       );
       const data = await res.json();
 

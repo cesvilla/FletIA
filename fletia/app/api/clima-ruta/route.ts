@@ -124,7 +124,7 @@ export async function POST(request: Request) {
           fetch(
             `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
             `&current=temperature_2m,precipitation,windspeed_10m,weathercode,is_day` +
-            `&timezone=America%2FArgentina%2FBuenos_Aires`
+            `&timezone=America%2FArgentina%2FBuenos_Aires&models=gfs_seamless`
           ),
           nombreFijo ? Promise.resolve(nombreFijo) : reversGeocode(lat, lon, km, esExtremo),
         ]);
