@@ -1,7 +1,8 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PUBLIC_PATHS = ['/', '/login', '/registro'];
+const PUBLIC_PATHS = ['/', '/login', '/registro', '/pendiente', '/vencido'];
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 
 export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -9,7 +10,9 @@ export async function middleware(request: NextRequest) {
   if (!supabaseUrl || !supabaseKey) return NextResponse.next();
 
   const pathname = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some(p => pathname === p || pathname === p + "/") || pathname.startsWith('/_next') || pathname.startsWith('/api');
+  const isPublic = PUBLIC_PATHS.some(p => pathname === p || pathname === p + '/') ||
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api');
 
   let supabaseResponse = NextResponse.next({ request });
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
@@ -25,7 +28,7 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // No logueado intentando acceder a ruta protegida
+  // No logueado → login
   if (!user && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
@@ -35,9 +38,40 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login?pendiente=1', request.url));
   }
 
-  // Logueado con email confirmado intentando acceder a login
+  // Logueado en /login → dashboard
   if (user && user.email_confirmed_at && pathname === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+
+  // Admin tiene acceso libre a todo
+  if (user && user.email === ADMIN_EMAIL) {
+    return supabaseResponse;
+  }
+
+  // Verificar acceso para rutas protegidas (no públicas, no admin)
+  if (user && user.email_confirmed_at && !isPublic) {
+    // No verificar en /admin (ya protegida en la page)
+    if (pathname.startsWith('/admin')) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+
+    // Consultar estado del acceso
+    try {
+      const baseUrl = request.nextUrl.origin;
+      const res = await fetch(`${baseUrl}/api/accesos?user_id=${user.id}`, {
+        headers: { cookie: request.headers.get('cookie') || '' },
+      });
+      const data = await res.json();
+
+      if (data.estado === 'pendiente' && pathname !== '/pendiente') {
+        return NextResponse.redirect(new URL('/pendiente', request.url));
+      }
+      if (data.estado === 'vencido' && pathname !== '/vencido') {
+        return NextResponse.redirect(new URL('/vencido', request.url));
+      }
+    } catch {
+      // Si falla la verificación, dejar pasar (mejor UX)
+    }
   }
 
   return supabaseResponse;

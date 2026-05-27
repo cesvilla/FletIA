@@ -43,12 +43,20 @@ export default function LoginPage() {
 
         if (data.user && data.user.identities?.length === 0) {
           setError('Este email ya está registrado. Probá iniciar sesión.');
-        } else if (data.session) {
-          // Si la confirmación de email está desactivada, ingresa directo
-          router.push('/dashboard');
-          router.refresh();
-        } else {
-          setMensaje('Cuenta creada. Revisá tu email para confirmar la cuenta.');
+        } else if (data.user) {
+          // Registrar en tabla de accesos como pendiente
+          await fetch('/api/accesos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: data.user.id, email, empresa }),
+          });
+
+          if (data.session) {
+            router.push('/pendiente');
+            router.refresh();
+          } else {
+            setMensaje('Cuenta creada. Revisá tu email para confirmar la cuenta y luego aguardá la aprobación.');
+          }
         }
       } else {
         // Iniciar sesión

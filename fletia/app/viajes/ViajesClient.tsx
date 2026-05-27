@@ -774,6 +774,11 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
           <a href="/rentabilidad" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
             <span>💰</span> Rentabilidad
           </a>
+          {email === process.env.NEXT_PUBLIC_ADMIN_EMAIL && (
+            <a href="/admin" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
+              <span>🔑</span> Admin
+            </a>
+          )}
         </nav>
 
         <div className="p-5" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
