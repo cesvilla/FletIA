@@ -86,9 +86,10 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   } | null>(null);
   const [loadingClima, setLoadingClima] = useState(false);
   const [traficoRuta, setTraficoRuta] = useState<{
-    segmentos: { lat: number; lon: number; nombre: string; velocidadActual: number; velocidadLibre: number; nivel: string; emoji: string; color: string; demora: number; incidentes: { tipo: string; emoji: string; descripcion: string; gravedad: number }[] }[];
+    segmentos: { lat: number; lon: number; nombre: string; velocidadActual: number; velocidadLibre: number; nivel: string; emoji: string; color: string; demora: number; bajaCobertua: boolean; incidentes: { tipo: string; emoji: string; descripcion: string; gravedad: number }[] }[];
     totalIncidentes: number;
     demoraTotal: number;
+    tramosConBajaCobertura: number;
     esDemo: boolean;
   } | null>(null);
   const [loadingTrafico, setLoadingTrafico] = useState(false);
@@ -1625,12 +1626,14 @@ type SegmentoTrafico = {
   velocidadActual: number; velocidadLibre: number;
   nivel: string; emoji: string; color: string;
   demora: number;
+  bajaCobertua: boolean;
   incidentes: { tipo: string; emoji: string; descripcion: string; gravedad: number }[];
 };
 type TraficoRutaData = {
   segmentos: SegmentoTrafico[];
   totalIncidentes: number;
   demoraTotal: number;
+  tramosConBajaCobertura: number;
   esDemo: boolean;
 };
 
@@ -1728,6 +1731,13 @@ function TraficoWidget({ loading, traficoRuta }: {
                   <div style={{ marginTop: 6, fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#4a4540', lineHeight: 1.2 }}>
                     {s.nombre.split(',')[0]}
                   </div>
+
+                  {/* Baja cobertura */}
+                  {s.bajaCobertua && (
+                    <div style={{ marginTop: 5, background: 'rgba(138,130,120,0.12)', borderRadius: 4, padding: '3px 5px', fontFamily: 'DM Mono, monospace', fontSize: 8, color: '#8a8278', lineHeight: 1.3 }}>
+                      📡 baja cobertura
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1749,6 +1759,15 @@ function TraficoWidget({ loading, traficoRuta }: {
             {traficoRuta.esDemo && (
               <div style={{ marginTop: 6, padding: '6px 12px', background: 'rgba(26,23,20,0.04)', border: '1px solid rgba(26,23,20,0.1)', borderRadius: 6, fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#8a8278' }}>
                 ℹ️ Datos de demostración. Agregá tu API key de TomTom en .env.local para datos en tiempo real.
+              </div>
+            )}
+
+            {!traficoRuta.esDemo && (traficoRuta.tramosConBajaCobertura ?? 0) > 0 && (
+              <div style={{ marginTop: 6, padding: '8px 12px', background: 'rgba(138,130,120,0.08)', border: '1px solid rgba(138,130,120,0.25)', borderRadius: 6, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#6b6560', lineHeight: 1.5, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ fontSize: 16, flexShrink: 0 }}>📡</span>
+                <span>
+                  <strong>{traficoRuta.tramosConBajaCobertura} tramo{traficoRuta.tramosConBajaCobertura > 1 ? 's' : ''}</strong> con baja cobertura de TomTom — generalmente rutas provinciales o zonas rurales con poco tráfico registrado. Los datos en esos tramos son estimados.
+                </span>
               </div>
             )}
           </>

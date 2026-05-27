@@ -15,6 +15,7 @@ interface SegmentoTrafico {
   color: string;
   demora: number;           // minutos extra estimados
   incidentes: Incidente[];
+  bajaCobertua: boolean;    // true si TomTom no tiene datos reales del tramo
 }
 
 interface Incidente {
@@ -159,6 +160,7 @@ function datosDemo(puntos: [number, number][], nombres: string[]): SegmentoTrafi
       color,
       demora,
       incidentes: esc.incidentes,
+      bajaCobertua: false,
     };
   });
 }
@@ -198,8 +200,9 @@ export async function POST(request: Request) {
           consultarIncidentes(lat, lon, TOMTOM_KEY),
         ]);
 
-        const vel = flow?.velocidadActual ?? 90;
-        const libre = flow?.velocidadLibre ?? 110;
+        const sinDatos = flow === null;
+        const vel = flow?.velocidadActual ?? 80;
+        const libre = flow?.velocidadLibre ?? 90;
         const { nivel, emoji, color } = clasificarTrafico(vel, libre);
         const demora = incidentes.length > 0
           ? Math.round(((libre - vel) / libre) * 25)
@@ -215,6 +218,7 @@ export async function POST(request: Request) {
           color,
           demora,
           incidentes,
+          bajaCobertua: sinDatos,
         };
       })
     );
@@ -223,6 +227,7 @@ export async function POST(request: Request) {
       segmentos,
       totalIncidentes: segmentos.reduce((n, s) => n + s.incidentes.length, 0),
       demoraTotal: segmentos.reduce((n, s) => n + s.demora, 0),
+      tramosConBajaCobertura: segmentos.filter(s => s.bajaCobertua).length,
       esDemo: false,
     });
 
