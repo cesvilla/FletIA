@@ -85,6 +85,13 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     tieneAlertas: boolean;
   } | null>(null);
   const [loadingClima, setLoadingClima] = useState(false);
+  const [traficoRuta, setTraficoRuta] = useState<{
+    segmentos: { lat: number; lon: number; nombre: string; velocidadActual: number; velocidadLibre: number; nivel: string; emoji: string; color: string; demora: number; incidentes: { tipo: string; emoji: string; descripcion: string; gravedad: number }[] }[];
+    totalIncidentes: number;
+    demoraTotal: number;
+    esDemo: boolean;
+  } | null>(null);
+  const [loadingTrafico, setLoadingTrafico] = useState(false);
   const [climaDetalle, setClimaDetalle] = useState<{
     nombre: string;
     lat: number; lon: number;
@@ -133,23 +140,34 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
       if (!res.ok) throw new Error(data.error || 'Error al calcular distancia');
       setForm(p => ({ ...p, kilometros: String(data.km) }));
       setMapaData({ polyline: data.polyline, origen: data.origen, destino: data.destino, km: data.km });
-      // Cargar clima apenas se traza la ruta
+      // Cargar clima y tráfico apenas se traza la ruta
       setClimaRuta(null);
+      setTraficoRuta(null);
       setLoadingClima(true);
+      setLoadingTrafico(true);
       fetch('/api/clima-ruta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           polyline: data.polyline,
           km: data.km,
-          origenCoord: data.origen,   // { lat, lon, nombre }
-          destinoCoord: data.destino, // { lat, lon, nombre }
+          origenCoord: data.origen,
+          destinoCoord: data.destino,
         }),
       })
         .then(r => r.json())
         .then(c => { if (c.puntos) setClimaRuta(c); })
         .catch(() => {})
         .finally(() => setLoadingClima(false));
+      fetch('/api/trafico-ruta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ polyline: data.polyline, km: data.km }),
+      })
+        .then(r => r.json())
+        .then(t => { if (t.segmentos) setTraficoRuta(t); })
+        .catch(() => {})
+        .finally(() => setLoadingTrafico(false));
     } catch (err: any) {
       setErrorKm(err.message);
     } finally {
@@ -183,13 +201,15 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
       setCamionInfo(data.camion);
       setConfirmado(false);
       setClimaRuta(null);
+      setTraficoRuta(null);
       setTimeout(() => {
         resultadoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }, 150);
 
-      // Consultar clima de la ruta si hay polyline disponible
+      // Consultar clima y tráfico de la ruta si hay polyline disponible
       if (mapaData?.polyline?.length) {
         setLoadingClima(true);
+        setLoadingTrafico(true);
         fetch('/api/clima-ruta', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -204,6 +224,15 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
           .then(c => { if (c.puntos) setClimaRuta(c); })
           .catch(() => {})
           .finally(() => setLoadingClima(false));
+        fetch('/api/trafico-ruta', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ polyline: mapaData.polyline, km: mapaData.km }),
+        })
+          .then(r => r.json())
+          .then(t => { if (t.segmentos) setTraficoRuta(t); })
+          .catch(() => {})
+          .finally(() => setLoadingTrafico(false));
       }
 
     } catch (err: any) {
@@ -907,6 +936,14 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       />
                     )}
 
+                    {/* Tráfico en ruta — preview bajo el mapa */}
+                    {(loadingTrafico || traficoRuta) && !resultado && (
+                      <TraficoWidget
+                        loading={loadingTrafico}
+                        traficoRuta={traficoRuta}
+                      />
+                    )}
+
                     {/* Km y Peso */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -1124,6 +1161,14 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       </div>
                       <p className="text-sm" style={{ color: '#4a4540', lineHeight: '1.6' }}>{resultado.descripcion}</p>
                     </div>
+
+                    {/* Tráfico en ruta — en resultado */}
+                    {(loadingTrafico || traficoRuta) && (
+                      <TraficoWidget
+                        loading={loadingTrafico}
+                        traficoRuta={traficoRuta}
+                      />
+                    )}
 
                     {/* Clima en ruta — en resultado */}
                     {(loadingClima || climaRuta) && (
@@ -1571,6 +1616,145 @@ function LitrosRealesForm({ viajeId, onAprendido }: { viajeId: string; onAprendi
         ¿Cuánto cargaste realmente?
       </span>
     </form>
+  );
+}
+
+// ─── Componente TraficoWidget ─────────────────────────────────────────────────
+type SegmentoTrafico = {
+  lat: number; lon: number; nombre: string;
+  velocidadActual: number; velocidadLibre: number;
+  nivel: string; emoji: string; color: string;
+  demora: number;
+  incidentes: { tipo: string; emoji: string; descripcion: string; gravedad: number }[];
+};
+type TraficoRutaData = {
+  segmentos: SegmentoTrafico[];
+  totalIncidentes: number;
+  demoraTotal: number;
+  esDemo: boolean;
+};
+
+function TraficoWidget({ loading, traficoRuta }: {
+  loading: boolean;
+  traficoRuta: TraficoRutaData | null;
+}) {
+  const tieneProblemas = (traficoRuta?.totalIncidentes ?? 0) > 0 ||
+    traficoRuta?.segmentos.some(s => s.nivel === 'lento' || s.nivel === 'congestionado');
+
+  return (
+    <div style={{ border: '1px solid rgba(26,23,20,0.12)', background: '#fff', borderRadius: 8, overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ padding: '10px 14px', background: tieneProblemas ? '#fff8f0' : '#f0f7f0', borderBottom: '1px solid rgba(26,23,20,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', fontWeight: 700, color: tieneProblemas ? '#c8860a' : '#1a6b3a', textTransform: 'uppercase', letterSpacing: '2px' }}>
+          🚦 {loading ? 'Consultando estado del tráfico...' : 'Estado del tráfico en ruta'}
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {traficoRuta?.esDemo && (
+            <div style={{ background: 'rgba(26,23,20,0.08)', borderRadius: 4, padding: '3px 8px', fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>
+              DEMO
+            </div>
+          )}
+          {!loading && traficoRuta && (traficoRuta.demoraTotal > 0) && (
+            <div style={{ background: '#c8860a', borderRadius: 4, padding: '3px 10px', fontFamily: 'DM Mono, monospace', fontSize: '10px', fontWeight: 700, color: '#fff' }}>
+              ⏱ +{traficoRuta.demoraTotal} min
+            </div>
+          )}
+          {!loading && traficoRuta && traficoRuta.demoraTotal === 0 && (
+            <div style={{ background: '#1a6b3a', borderRadius: 4, padding: '3px 10px', fontFamily: 'DM Mono, monospace', fontSize: '10px', fontWeight: 700, color: '#fff' }}>
+              ✓ Sin demoras
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ padding: 12 }}>
+        {loading && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
+            {[1,2,3,4,5].map(i => (
+              <div key={i} style={{ height: 90, background: '#f0f0f0', borderRadius: 8 }} />
+            ))}
+          </div>
+        )}
+
+        {traficoRuta && !loading && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${traficoRuta.segmentos.length},1fr)`, gap: 8 }}>
+              {traficoRuta.segmentos.map((s, i) => (
+                <div
+                  key={i}
+                  style={{
+                    background: s.nivel === 'fluido' ? '#f0faf4'
+                      : s.nivel === 'moderado' ? '#fffbf0'
+                      : s.nivel === 'lento' ? '#fff5f0'
+                      : '#fff0f0',
+                    border: `1.5px solid ${s.color}33`,
+                    borderRadius: 10,
+                    padding: '12px 6px',
+                    textAlign: 'center',
+                  }}
+                >
+                  {/* Semáforo emoji grande */}
+                  <div style={{ fontSize: 22, marginBottom: 4 }}>{s.emoji}</div>
+
+                  {/* Velocidad actual */}
+                  <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 20, fontWeight: 800, color: s.color, lineHeight: 1 }}>
+                    {s.velocidadActual}
+                  </div>
+                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#8a8278', marginBottom: 4 }}>km/h</div>
+
+                  {/* Nivel texto */}
+                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, fontWeight: 700, color: s.color, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5 }}>
+                    {s.nivel}
+                  </div>
+
+                  {/* Demora */}
+                  {s.demora > 0 && (
+                    <div style={{ background: s.color + '22', borderRadius: 4, padding: '2px 5px', fontFamily: 'DM Mono, monospace', fontSize: 9, fontWeight: 700, color: s.color, marginBottom: 4 }}>
+                      +{s.demora} min
+                    </div>
+                  )}
+
+                  {/* Incidentes */}
+                  {s.incidentes.map((inc, j) => (
+                    <div key={j} style={{ marginTop: 4, background: 'rgba(212,68,12,0.08)', borderRadius: 4, padding: '3px 5px' }}>
+                      <div style={{ fontSize: 12 }}>{inc.emoji}</div>
+                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 8, color: '#d4440c', lineHeight: 1.3 }}>
+                        {inc.tipo}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Nombre tramo */}
+                  <div style={{ marginTop: 6, fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#4a4540', lineHeight: 1.2 }}>
+                    {s.nombre.split(',')[0]}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Resumen incidentes */}
+            {traficoRuta.totalIncidentes > 0 ? (
+              <div style={{ marginTop: 10, padding: '8px 12px', background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#856404', lineHeight: 1.5 }}>
+                ⚠️ <strong>{traficoRuta.totalIncidentes} incidente{traficoRuta.totalIncidentes > 1 ? 's' : ''}</strong> activo{traficoRuta.totalIncidentes > 1 ? 's' : ''} en la ruta.
+                {traficoRuta.demoraTotal > 0 && <> Demora estimada: <strong>+{traficoRuta.demoraTotal} minutos</strong>.</>}
+                {' '}Mantenete atento a las señales viales.
+              </div>
+            ) : (
+              <div style={{ marginTop: 10, padding: '8px 12px', background: '#f1f8f1', border: '1px solid #c8e6c9', borderRadius: 6, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#2e7d32' }}>
+                ✅ Sin incidentes reportados en la ruta. Tráfico{' '}
+                {traficoRuta.segmentos.every(s => s.nivel === 'fluido') ? 'fluido en todos los tramos.' : 'con algunas demoras menores.'}
+              </div>
+            )}
+
+            {traficoRuta.esDemo && (
+              <div style={{ marginTop: 6, padding: '6px 12px', background: 'rgba(26,23,20,0.04)', border: '1px solid rgba(26,23,20,0.1)', borderRadius: 6, fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#8a8278' }}>
+                ℹ️ Datos de demostración. Agregá tu API key de TomTom en .env.local para datos en tiempo real.
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
