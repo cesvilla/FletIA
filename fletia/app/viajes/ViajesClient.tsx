@@ -213,7 +213,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     }
   }
 
-  async function verDetalleClima(punto: { lat: number; lon: number; nombre: string }) {
+  async function verDetalleClima(punto: { lat: number; lon: number; nombre: string; temp?: number; condicion?: string; emoji?: string; viento?: number; lluvia?: number }) {
     setLoadingDetalle(true);
     setClimaDetalle(null);
     try {
@@ -257,28 +257,27 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
 
       const res = await fetch(
         `https://api.open-meteo.com/v1/forecast?latitude=${punto.lat}&longitude=${punto.lon}` +
-        `&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,precipitation,relativehumidity_2m,is_day` +
+        `&current=apparent_temperature,weathercode,windspeed_10m,precipitation,relativehumidity_2m,is_day` +
         `&hourly=temperature_2m,weathercode,precipitation_probability,is_day` +
         `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,precipitation_probability_max` +
         `&timezone=America%2FArgentina%2FBuenos_Aires&forecast_days=5&models=gfs_seamless`
       );
       const data = await res.json();
 
-      // Ahora
+      // Ahora: usar temp/condicion/emoji de la TARJETA para garantizar consistencia visual
       const cur = data.current;
-      // is_day: usar el valor de la API; si no está, deducir por hora local (6-20 = día)
       const isDayCur: number = cur.is_day !== undefined && cur.is_day !== null
         ? Number(cur.is_day)
         : (() => { const h = new Date().getHours(); return h >= 6 && h < 20 ? 1 : 0; })();
       const ahoraWMO = getWMO(cur.weathercode, isDayCur);
       const ahora = {
-        temp: Math.round(cur.temperature_2m),
+        temp: punto.temp ?? Math.round(cur.apparent_temperature),   // ← valor de la tarjeta
         sensacion: Math.round(cur.apparent_temperature),
-        condicion: ahoraWMO.label,
-        emoji: ahoraWMO.emoji,
+        condicion: punto.condicion ?? ahoraWMO.label,               // ← condicion de la tarjeta
+        emoji: punto.emoji ?? ahoraWMO.emoji,                       // ← emoji de la tarjeta
         humedad: Math.round(cur.relativehumidity_2m),
-        viento: Math.round(cur.windspeed_10m),
-        lluvia: Math.round(cur.precipitation * 10) / 10,
+        viento: punto.viento ?? Math.round(cur.windspeed_10m),
+        lluvia: punto.lluvia ?? Math.round(cur.precipitation * 10) / 10,
       };
 
       // Próximas 6 horas (desde hora actual)
@@ -1590,7 +1589,7 @@ type ClimaRutaData = {
 function ClimaWidget({ loading, climaRuta, onVerDetalle }: {
   loading: boolean;
   climaRuta: ClimaRutaData | null;
-  onVerDetalle: (p: { lat: number; lon: number; nombre: string }) => void;
+  onVerDetalle: (p: PuntoClima) => void;
 }) {
   return (
     <div style={{ border: '1px solid rgba(26,23,20,0.12)', background: '#fff', borderRadius: 8, overflow: 'hidden' }}>
