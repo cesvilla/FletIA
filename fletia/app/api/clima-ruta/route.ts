@@ -56,14 +56,16 @@ function muestrarPuntos(polyline: [number, number][], n: number): [number, numbe
 // - Ruta corta (<80km): muestra departamento/ciudad (zoom 10)
 // - esExtremo=true (origen/destino): SIEMPRE zoom 10 para mostrar el lugar exacto
 // Correcciones de nombres que Nominatim devuelve mal
-const CORRECCIONES: Record<string, string> = {
+// Correcciones de ciudades que Nominatim devuelve mal
+const CORRECCIONES_CIUDAD: Record<string, string> = {
   'san salvador de tucumán': 'San Miguel de Tucumán',
   'san salvador de tucuman': 'San Miguel de Tucumán',
   'ciudad de tucumán': 'San Miguel de Tucumán',
+  'san miguel de tucuman': 'San Miguel de Tucumán',
 };
 
-function corregirNombre(nombre: string): string {
-  return CORRECCIONES[nombre.toLowerCase()] ?? nombre;
+function corregirCiudad(ciudad: string): string {
+  return CORRECCIONES_CIUDAD[ciudad.toLowerCase().trim()] ?? ciudad;
 }
 
 async function reversGeocode(lat: number, lon: number, km: number, esExtremo = false): Promise<string> {
@@ -81,19 +83,21 @@ async function reversGeocode(lat: number, lon: number, km: number, esExtremo = f
 
     // Origen/destino y rutas cortas: mostrar ciudad/departamento con detalle
     if (esExtremo || km <= 80) {
-      const ciudad = addr?.city || addr?.town || addr?.village || addr?.county || addr?.state_district;
-      if (ciudad && provincia && ciudad !== provincia) return corregirNombre(`${ciudad}, ${provincia}`);
-      return corregirNombre(ciudad || provincia || 'En ruta');
+      const ciudadRaw = addr?.city || addr?.town || addr?.village || addr?.county || addr?.state_district;
+      const ciudad = ciudadRaw ? corregirCiudad(ciudadRaw) : null;
+      if (ciudad && provincia && ciudad !== provincia) return `${ciudad}, ${provincia}`;
+      return ciudad || provincia || 'En ruta';
     }
 
     if (km > 200) {
-      return corregirNombre(provincia || data.display_name?.split(',')[0] || 'En ruta');
+      return provincia || data.display_name?.split(',')[0] || 'En ruta';
     }
 
     // Ruta media (puntos intermedios): ciudad + provincia
-    const ciudad = addr?.city || addr?.town || addr?.county || addr?.state_district;
-    if (ciudad && provincia && ciudad !== provincia) return corregirNombre(`${ciudad}, ${provincia}`);
-    return corregirNombre(provincia || ciudad || 'En ruta');
+    const ciudadRaw = addr?.city || addr?.town || addr?.county || addr?.state_district;
+    const ciudad = ciudadRaw ? corregirCiudad(ciudadRaw) : null;
+    if (ciudad && provincia && ciudad !== provincia) return `${ciudad}, ${provincia}`;
+    return provincia || ciudad || 'En ruta';
 
   } catch {
     return 'En ruta';
@@ -108,8 +112,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Polyline inválida' }, { status: 400 });
     }
 
-    // Tomar hasta 8 puntos equidistantes; la deduplicación por nombre limita lo que se muestra
-    const PUNTOS = Math.min(8, polyline.length);
+    // Tomar hasta 14 puntos equidistantes para cubrir todas las provincias de la ruta
+    const PUNTOS = Math.min(14, polyline.length);
     const muestras = muestrarPuntos(polyline, PUNTOS);
 
     // Reemplazar primer y último punto con coords exactas del geocodificador

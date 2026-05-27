@@ -1645,16 +1645,16 @@ function TraficoWidget({ loading, traficoRuta }: {
 
       <div style={{ padding: 12 }}>
         {loading && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, overflowX: 'hidden' }}>
             {[1,2,3,4,5].map(i => (
-              <div key={i} style={{ height: 90, background: '#f0f0f0', borderRadius: 8 }} />
+              <div key={i} style={{ flexShrink: 0, width: 110, height: 160, background: '#f0f0f0', borderRadius: 8 }} />
             ))}
           </div>
         )}
 
         {traficoRuta && !loading && (
           <>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'thin', scrollbarColor: '#1a6b3a #f0ede8' }}>
               {traficoRuta.segmentos.map((s, i) => (
                 <div
                   key={i}
@@ -1785,16 +1785,16 @@ function ClimaWidget({ loading, climaRuta, onVerDetalle }: {
 
       <div style={{ padding: 12 }}>
         {loading && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, overflowX: 'hidden' }}>
             {[1,2,3,4,5].map(i => (
-              <div key={i} style={{ height: 90, background: '#f0f0f0', borderRadius: 8 }} />
+              <div key={i} style={{ flexShrink: 0, width: 110, height: 160, background: '#f0f0f0', borderRadius: 8 }} />
             ))}
           </div>
         )}
 
         {climaRuta && !loading && (
           <>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'thin', scrollbarColor: '#d4440c #f0ede8' }}>
               {climaRuta.puntos.map((p, i) => (
                 <button
                   type="button"
