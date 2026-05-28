@@ -45,11 +45,15 @@ export default function LoginPage() {
           setError('Este email ya está registrado. Probá iniciar sesión.');
         } else if (data.user) {
           // Registrar en tabla de accesos como pendiente
-          await fetch('/api/accesos', {
+          const accesosRes = await fetch('/api/accesos', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_id: data.user.id, email, empresa }),
           });
+          if (!accesosRes.ok) {
+            const accesosData = await accesosRes.json();
+            throw new Error(accesosData.error || 'Error al registrar acceso');
+          }
 
           if (data.session) {
             router.push('/pendiente');

@@ -28,7 +28,11 @@ export default function AdminClient() {
     setLoading(true);
     const res = await fetch('/api/admin');
     const data = await res.json();
-    if (data.accesos) setAccesos(data.accesos);
+    if (data.accesos) {
+      setAccesos(data.accesos);
+    } else if (data.error) {
+      setMensaje({ texto: `Error al cargar: ${data.error}`, tipo: 'error' });
+    }
     setLoading(false);
   }
 
