@@ -2,17 +2,24 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 const PUBLIC_PATHS = ['/', '/login', '/registro', '/pendiente', '/vencido'];
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 
 export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // Leer ADMIN_EMAIL dentro de la función para garantizar disponibilidad en Edge Runtime
+  const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || process.env.ADMIN_EMAIL;
+
   if (!supabaseUrl || !supabaseKey) return NextResponse.next();
 
   const pathname = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some(p => pathname === p || pathname === p + '/') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api');
+
+  // /admin siempre va a login si no hay sesión de admin (nunca a /pendiente)
+  if (pathname.startsWith('/admin') && !isPublic) {
+    // Se resuelve más abajo después de obtener el user
+  }
 
   let supabaseResponse = NextResponse.next({ request });
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
@@ -28,12 +35,17 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Admin tiene acceso libre a todo — check PRIMERO antes de cualquier otra verificación
+  // Admin tiene acceso libre — check PRIMERO, antes de todo
   if (user && user.email === ADMIN_EMAIL) {
     if (pathname === '/login') {
       return NextResponse.redirect(new URL('/admin', request.url));
     }
     return supabaseResponse;
+  }
+
+  // Si intenta acceder a /admin pero NO es admin → siempre al login (nunca a /pendiente)
+  if (pathname.startsWith('/admin')) {
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
   // No logueado → login
@@ -51,14 +63,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  // Verificar acceso para rutas protegidas (no públicas, no admin)
+  // Verificar acceso para rutas protegidas
   if (user && user.email_confirmed_at && !isPublic) {
-    // No admin → bloquear /admin
-    if (pathname.startsWith('/admin')) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-
-    // Consultar estado del acceso
     try {
       const baseUrl = request.nextUrl.origin;
       const res = await fetch(`${baseUrl}/api/accesos?user_id=${user.id}`, {
@@ -73,7 +79,7 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/vencido', request.url));
       }
     } catch {
-      // Si falla la verificación, dejar pasar (mejor UX)
+      // Si falla la verificación, dejar pasar
     }
   }
 
