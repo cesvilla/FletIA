@@ -26,7 +26,14 @@ export async function GET(request: Request) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.user) {
-      // Crear acceso pendiente si no existe todavía
+      const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || process.env.ADMIN_EMAIL;
+
+      // Admin nunca toca la tabla accesos, va directo al panel
+      if (data.user.email === adminEmail) {
+        return NextResponse.redirect(`${origin}/admin`);
+      }
+
+      // Usuario normal: crear acceso pendiente solo si no existe
       await fetch(`${origin}/api/accesos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
