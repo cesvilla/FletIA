@@ -30,6 +30,14 @@ export default function LoginPage() {
 
     try {
       if (modo === 'registro') {
+        // Validar formato de email
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+        if (!emailRegex.test(email)) {
+          setError('El email no es válido. Revisá que tenga el formato correcto (ej: nombre@empresa.com).');
+          setLoading(false);
+          return;
+        }
+
         // Registrar nuevo usuario
         const { data, error } = await supabase.auth.signUp({
           email,
