@@ -140,83 +140,195 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
   async function exportarExcel() {
     setExportando('excel');
     try {
-      const XLSX = await import('xlsx');
+      const ExcelJS = await import('exceljs');
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'FletIA';
+      wb.created = new Date();
 
       const periodoLabel = mesSeleccionado ? formatMes(mesSeleccionado) : 'Todos los meses';
+      const borderStyle: any = { style: 'thin', color: { argb: 'FFE0DDD8' } };
+      const border = { top: borderStyle, left: borderStyle, bottom: borderStyle, right: borderStyle };
 
-      // Hoja 1: Viajes detallados
-      const filas = viajesFiltrados.map(v => {
-        const ganancia = v.flete_cobrado ? v.flete_cobrado - v.costo_total : null;
-        const margen = v.flete_cobrado ? ((ganancia! / v.flete_cobrado) * 100).toFixed(1) : null;
-        return {
-          'Fecha': new Date(v.created_at).toLocaleDateString('es-AR'),
-          'Origen': v.origen || '—',
-          'Destino': v.destino || '—',
-          'Patente': v.camiones?.patente || '—',
-          'Marca': v.camiones?.marca || '—',
-          'Modelo': v.camiones?.modelo || '—',
-          'Kilómetros': v.kilometros,
-          'Carga (ton)': v.peso_carga,
-          'Tipo de ruta': RUTA_LABEL[v.tipo_ruta || ''] || v.tipo_ruta || '—',
-          'Terreno': TERRENO_LABEL[v.terreno || ''] || v.terreno || '—',
-          'Precio gasoil ($/L)': v.precio_combustible || '—',
-          'Litros estimados': v.litros_totales,
-          'Litros reales': v.litros_reales || '—',
-          'Consumo (L/100km)': v.consumo_real || '—',
-          'Costo combustible ($)': v.costo_total,
-          'Costo por km ($/km)': v.costo_por_km,
-          'Flete cobrado ($)': v.flete_cobrado || '—',
-          'Ganancia neta ($)': ganancia !== null ? Math.round(ganancia) : '—',
-          'Margen (%)': margen !== null ? `${margen}%` : '—',
-          'Factor peso': v.factor_peso || '—',
-          'Factor ruta': v.factor_ruta || '—',
-          'Factor terreno': v.factor_terreno || '—',
-          '% carga': v.porcentaje_carga !== undefined ? `${v.porcentaje_carga}%` : '—',
-          'Análisis IA': v.descripcion_ia || '—',
-        };
+      // ── HOJA 1: VIAJES ──────────────────────────────────────────
+      const ws1 = wb.addWorksheet('Viajes');
+      ws1.columns = [
+        { header: 'Fecha',               key: 'fecha',       width: 13 },
+        { header: 'Origen',              key: 'origen',      width: 22 },
+        { header: 'Destino',             key: 'destino',     width: 22 },
+        { header: 'Patente',             key: 'patente',     width: 11 },
+        { header: 'Marca',               key: 'marca',       width: 13 },
+        { header: 'Modelo',              key: 'modelo',      width: 14 },
+        { header: 'Kilómetros',          key: 'km',          width: 12 },
+        { header: 'Carga (ton)',         key: 'carga',       width: 12 },
+        { header: 'Tipo de ruta',        key: 'ruta',        width: 14 },
+        { header: 'Terreno',             key: 'terreno',     width: 13 },
+        { header: 'Precio gasoil ($/L)', key: 'preciogas',   width: 18 },
+        { header: 'Litros estimados',    key: 'litrosEst',   width: 16 },
+        { header: 'Litros reales',       key: 'litrosReal',  width: 14 },
+        { header: 'Consumo (L/100km)',   key: 'consumo',     width: 17 },
+        { header: 'Costo combustible ($)',key: 'costo',      width: 20 },
+        { header: 'Costo por km ($/km)', key: 'costokm',     width: 18 },
+        { header: 'Flete cobrado ($)',   key: 'flete',       width: 17 },
+        { header: 'Ganancia neta ($)',   key: 'ganancia',    width: 17 },
+        { header: 'Margen (%)',          key: 'margen',      width: 12 },
+        { header: 'Factor peso',         key: 'fpeso',       width: 12 },
+        { header: 'Factor ruta',         key: 'fruta',       width: 12 },
+        { header: 'Factor terreno',      key: 'fterreno',    width: 14 },
+        { header: '% Carga',             key: 'pctcarga',    width: 10 },
+        { header: 'Análisis IA',         key: 'ia',          width: 60 },
+      ];
+
+      // Estilo encabezado hoja 1
+      const h1 = ws1.getRow(1);
+      h1.height = 32;
+      h1.eachCell(cell => {
+        cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A1714' } };
+        cell.font   = { color: { argb: 'FFFFFFFF' }, bold: true, size: 10, name: 'Calibri' };
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        cell.border = border;
       });
 
-      // Hoja 2: Resumen mensual
-      const resumenMap: Record<string, { mes: string; viajes: number; costo: number; flete: number; km: number; litros: number }> = {};
+      // Filas de datos
+      viajesFiltrados.forEach((v, i) => {
+        const ganancia = v.flete_cobrado ? v.flete_cobrado - v.costo_total : null;
+        const margen   = v.flete_cobrado && ganancia !== null ? ((ganancia / v.flete_cobrado) * 100) : null;
+        const row = ws1.addRow({
+          fecha:     new Date(v.created_at).toLocaleDateString('es-AR'),
+          origen:    v.origen || '—',
+          destino:   v.destino || '—',
+          patente:   v.camiones?.patente || '—',
+          marca:     v.camiones?.marca || '—',
+          modelo:    v.camiones?.modelo || '—',
+          km:        v.kilometros,
+          carga:     v.peso_carga,
+          ruta:      RUTA_LABEL[v.tipo_ruta || ''] || v.tipo_ruta || '—',
+          terreno:   TERRENO_LABEL[v.terreno || ''] || v.terreno || '—',
+          preciogas: v.precio_combustible || '—',
+          litrosEst: Math.round(v.litros_totales),
+          litrosReal:v.litros_reales ? Math.round(v.litros_reales) : '—',
+          consumo:   v.consumo_real || '—',
+          costo:     Math.round(v.costo_total),
+          costokm:   v.costo_por_km,
+          flete:     v.flete_cobrado ? Math.round(v.flete_cobrado) : '—',
+          ganancia:  ganancia !== null ? Math.round(ganancia) : '—',
+          margen:    margen !== null ? `${margen.toFixed(1)}%` : '—',
+          fpeso:     v.factor_peso || '—',
+          fruta:     v.factor_ruta || '—',
+          fterreno:  v.factor_terreno || '—',
+          pctcarga:  v.porcentaje_carga !== undefined ? `${v.porcentaje_carga}%` : '—',
+          ia:        v.descripcion_ia || '—',
+        });
+
+        const bgColor = i % 2 === 0 ? 'FFFFFFFF' : 'FFFAF9F7';
+        row.height = 28;
+        row.eachCell((cell, colNumber) => {
+          cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+          cell.font   = { size: 9, name: 'Calibri' };
+          cell.border = border;
+          cell.alignment = { vertical: 'top', wrapText: colNumber === 24 };
+
+          // Color ganancia
+          if (colNumber === 18 && ganancia !== null) {
+            cell.font = { size: 9, name: 'Calibri', color: { argb: ganancia >= 0 ? 'FF1A6B3A' : 'FFD4440C' }, bold: true };
+          }
+          // Color margen
+          if (colNumber === 19 && margen !== null) {
+            cell.font = { size: 9, name: 'Calibri', color: { argb: margen >= 25 ? 'FF1A6B3A' : margen >= 10 ? 'FFC8860A' : 'FFD4440C' } };
+          }
+        });
+        // IA con texto completo y altura auto
+        const iaCell = row.getCell(24);
+        iaCell.alignment = { wrapText: true, vertical: 'top' };
+        if (v.descripcion_ia && v.descripcion_ia.length > 80) row.height = 52;
+      });
+
+      // Fila TOTALES hoja 1
+      const gananciaTotal = totales.flete - totales.costo;
+      const margenTotal   = totales.flete > 0 ? ((gananciaTotal / totales.flete) * 100).toFixed(1) : '—';
+      const totRow = ws1.addRow({
+        fecha: 'TOTAL', origen: '', destino: '', patente: '', marca: '', modelo: '',
+        km: totales.km, carga: '', ruta: '', terreno: '', preciogas: '',
+        litrosEst: Math.round(totales.litros), litrosReal: '', consumo: '',
+        costo: Math.round(totales.costo), costokm: '',
+        flete: Math.round(totales.flete),
+        ganancia: Math.round(gananciaTotal),
+        margen: totales.flete > 0 ? `${margenTotal}%` : '—',
+        fpeso: '', fruta: '', fterreno: '', pctcarga: '', ia: `${viajesFiltrados.length} viajes`,
+      });
+      totRow.height = 28;
+      totRow.eachCell(cell => {
+        cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A1714' } };
+        cell.font   = { color: { argb: 'FFFFFFFF' }, bold: true, size: 10, name: 'Calibri' };
+        cell.border = border;
+        cell.alignment = { vertical: 'middle' };
+      });
+      // Color ganancia en totales
+      totRow.getCell(18).font = { color: { argb: gananciaTotal >= 0 ? 'FF4ADE80' : 'FFFF6B6B' }, bold: true, size: 10 };
+
+      // ── HOJA 2: RESUMEN MENSUAL ─────────────────────────────────
+      const ws2 = wb.addWorksheet('Resumen mensual');
+      ws2.columns = [
+        { header: 'Mes',                  key: 'mes',      width: 18 },
+        { header: 'Viajes',               key: 'viajes',   width: 10 },
+        { header: 'Km totales',           key: 'km',       width: 14 },
+        { header: 'Litros totales',       key: 'litros',   width: 15 },
+        { header: 'Gasto combustible ($)',key: 'costo',    width: 22 },
+        { header: 'Flete cobrado ($)',    key: 'flete',    width: 18 },
+        { header: 'Ganancia neta ($)',    key: 'ganancia', width: 18 },
+        { header: 'Margen promedio (%)',  key: 'margen',   width: 20 },
+      ];
+      const h2 = ws2.getRow(1);
+      h2.height = 32;
+      h2.eachCell(cell => {
+        cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD4440C' } };
+        cell.font   = { color: { argb: 'FFFFFFFF' }, bold: true, size: 10, name: 'Calibri' };
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        cell.border = border;
+      });
+
+      const resumenMap: Record<string, any> = {};
       viajes.forEach(v => {
         const mes = v.created_at.substring(0, 7);
         if (!resumenMap[mes]) resumenMap[mes] = { mes: formatMes(mes), viajes: 0, costo: 0, flete: 0, km: 0, litros: 0 };
         resumenMap[mes].viajes++;
-        resumenMap[mes].costo += v.costo_total;
-        resumenMap[mes].flete += v.flete_cobrado || 0;
-        resumenMap[mes].km += v.kilometros;
+        resumenMap[mes].costo  += v.costo_total;
+        resumenMap[mes].flete  += v.flete_cobrado || 0;
+        resumenMap[mes].km     += v.kilometros;
         resumenMap[mes].litros += v.litros_totales;
       });
-      const resumenFilas = Object.values(resumenMap).sort((a, b) => b.mes.localeCompare(a.mes)).map(r => ({
-        'Mes': r.mes,
-        'Viajes': r.viajes,
-        'Km totales': r.km,
-        'Litros totales': Math.round(r.litros),
-        'Gasto combustible ($)': Math.round(r.costo),
-        'Flete cobrado ($)': Math.round(r.flete),
-        'Ganancia neta ($)': Math.round(r.flete - r.costo),
-        'Margen promedio (%)': r.flete > 0 ? `${(((r.flete - r.costo) / r.flete) * 100).toFixed(1)}%` : '—',
-      }));
 
-      const wb = XLSX.utils.book_new();
+      Object.values(resumenMap).sort((a: any, b: any) => b.mes.localeCompare(a.mes)).forEach((r: any, i) => {
+        const gan = r.flete - r.costo;
+        const row = ws2.addRow({
+          mes:      r.mes,
+          viajes:   r.viajes,
+          km:       r.km,
+          litros:   Math.round(r.litros),
+          costo:    Math.round(r.costo),
+          flete:    Math.round(r.flete),
+          ganancia: Math.round(gan),
+          margen:   r.flete > 0 ? `${(((gan) / r.flete) * 100).toFixed(1)}%` : '—',
+        });
+        row.height = 22;
+        row.eachCell((cell, col) => {
+          cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: i % 2 === 0 ? 'FFFFFFFF' : 'FFFAF9F7' } };
+          cell.font   = { size: 10, name: 'Calibri' };
+          cell.border = border;
+          cell.alignment = { vertical: 'middle' };
+          if (col === 7) cell.font = { size: 10, name: 'Calibri', color: { argb: gan >= 0 ? 'FF1A6B3A' : 'FFD4440C' }, bold: true };
+        });
+      });
 
-      // Hoja viajes
-      const ws1 = XLSX.utils.json_to_sheet(filas);
-      ws1['!cols'] = [
-        { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 14 },
-        { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 14 },
-        { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
-        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 50 },
-      ];
-      XLSX.utils.book_append_sheet(wb, ws1, 'Viajes');
-
-      // Hoja resumen
-      const ws2 = XLSX.utils.json_to_sheet(resumenFilas);
-      ws2['!cols'] = [{ wch: 16 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 20 }];
-      XLSX.utils.book_append_sheet(wb, ws2, 'Resumen mensual');
-
+      // Generar y descargar
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer as ArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
       const fecha = new Date().toLocaleDateString('es-AR').replace(/\//g, '-');
-      XLSX.writeFile(wb, `FletIA_${empresa.replace(/\s+/g, '_')}_${periodoLabel.replace(/\s+/g, '_')}_${fecha}.xlsx`);
+      a.download = `FletIA_${empresa.replace(/\s+/g, '_')}_${periodoLabel.replace(/\s+/g, '_')}_${fecha}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
     } finally {
       setExportando(null);
     }
@@ -231,52 +343,76 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
 
       const periodoLabel = mesSeleccionado ? formatMes(mesSeleccionado) : 'Todos los meses';
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const ACCENT  = [212, 68, 12]  as [number,number,number];
+      const DARK    = [26, 23, 20]   as [number,number,number];
+      const GREEN   = [26, 107, 58]  as [number,number,number];
+      const RED     = [180, 30, 30]  as [number,number,number];
+      const W       = 297;
 
-      // Encabezado
-      doc.setFillColor(26, 23, 20);
-      doc.rect(0, 0, 297, 22, 'F');
+      // ── ENCABEZADO ─────────────────────────────────────────────
+      doc.setFillColor(...DARK);
+      doc.rect(0, 0, W, 26, 'F');
+      // Franja accent
+      doc.setFillColor(...ACCENT);
+      doc.rect(0, 26, W, 2, 'F');
+
       doc.setTextColor(255, 255, 255);
-      doc.setFontSize(18);
+      doc.setFontSize(22);
       doc.setFont('helvetica', 'bold');
-      doc.text('FletIA', 14, 14);
-      doc.setFontSize(10);
+      doc.text('Flet', 14, 17);
+      doc.setTextColor(...ACCENT);
+      doc.text('IA', 33, 17);
+      doc.setTextColor(180, 180, 180);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.text('// combustible inteligente', 14, 23);
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(13);
+      doc.setFont('helvetica', 'bold');
+      doc.text(empresa, W - 14, 13, { align: 'right' });
+      doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(200, 200, 200);
-      doc.text('// combustible inteligente', 38, 14);
-      doc.setTextColor(212, 68, 12);
-      doc.setFontSize(11);
-      doc.text(`${empresa}`, 180, 10);
-      doc.setTextColor(200, 200, 200);
-      doc.setFontSize(9);
-      doc.text(`${periodoLabel}  ·  ${viajesFiltrados.length} viajes`, 180, 16);
+      doc.text(`${periodoLabel}  ·  ${viajesFiltrados.length} viajes  ·  Generado ${new Date().toLocaleDateString('es-AR')}`, W - 14, 21, { align: 'right' });
 
-      // Resumen rápido
-      doc.setTextColor(26, 23, 20);
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'bold');
-      const y0 = 28;
-      doc.text(`Km totales: ${totales.km.toLocaleString('es-AR')}`, 14, y0);
-      doc.text(`Litros: ${Math.round(totales.litros).toLocaleString('es-AR')}`, 70, y0);
-      doc.text(`Gasto combustible: $${Math.round(totales.costo).toLocaleString('es-AR')}`, 120, y0);
-      doc.text(`Flete cobrado: $${Math.round(totales.flete).toLocaleString('es-AR')}`, 200, y0);
+      // ── TARJETAS DE RESUMEN ─────────────────────────────────────
       const ganTotal = totales.flete - totales.costo;
-      doc.setTextColor(ganTotal >= 0 ? 26 : 212, ganTotal >= 0 ? 107 : 68, ganTotal >= 0 ? 58 : 12);
-      doc.text(`Ganancia neta: $${Math.round(ganTotal).toLocaleString('es-AR')}`, 250, y0);
-
-      // Tabla principal
-      const cols = [
-        'Fecha', 'Origen → Destino', 'Camión', 'KM', 'Carga\n(ton)',
-        'Ruta', 'Lts\nEstim.', 'Lts\nReales', 'Costo\nComb. ($)', 'Costo\n$/km',
-        'Flete\n($)', 'Ganancia\n($)', 'Margen\n(%)',
+      const tarjetas = [
+        { label: 'KM RECORRIDOS',        val: `${totales.km.toLocaleString('es-AR')} km`,         color: DARK },
+        { label: 'LITROS CONSUMIDOS',    val: `${Math.round(totales.litros).toLocaleString('es-AR')} lts`, color: DARK },
+        { label: 'GASTO COMBUSTIBLE',    val: `$${Math.round(totales.costo).toLocaleString('es-AR')}`,   color: RED },
+        { label: 'FLETE COBRADO',        val: `$${Math.round(totales.flete).toLocaleString('es-AR')}`,   color: GREEN },
+        { label: 'GANANCIA NETA',        val: `$${Math.round(ganTotal).toLocaleString('es-AR')}`,        color: ganTotal >= 0 ? GREEN : RED },
+        { label: 'MARGEN',               val: totales.flete > 0 ? `${(((ganTotal) / totales.flete) * 100).toFixed(1)}%` : '—', color: ganTotal >= 0 ? GREEN : RED },
       ];
+      const cardW = (W - 28) / tarjetas.length;
+      tarjetas.forEach((t, i) => {
+        const cx = 14 + i * cardW;
+        const cy = 31;
+        doc.setFillColor(248, 247, 245);
+        doc.roundedRect(cx, cy, cardW - 3, 18, 1, 1, 'F');
+        doc.setTextColor(120, 120, 120);
+        doc.setFontSize(6);
+        doc.setFont('helvetica', 'bold');
+        doc.text(t.label, cx + (cardW - 3) / 2, cy + 5.5, { align: 'center' });
+        doc.setTextColor(...t.color);
+        doc.setFontSize(10);
+        doc.text(t.val, cx + (cardW - 3) / 2, cy + 13, { align: 'center' });
+      });
+
+      // ── TABLA ───────────────────────────────────────────────────
+      const cols = ['Fecha', 'Origen', 'Destino', 'Camión', 'KM', 'Ton', 'Ruta',
+                    'Lts Est.', 'Lts Real', 'Costo ($)', '$/km', 'Flete ($)', 'Ganancia ($)', 'Margen'];
 
       const rows = viajesFiltrados.map(v => {
         const ganancia = v.flete_cobrado ? v.flete_cobrado - v.costo_total : null;
-        const margen = v.flete_cobrado ? (((ganancia!) / v.flete_cobrado) * 100).toFixed(1) : '—';
+        const margen   = v.flete_cobrado && ganancia !== null ? `${((ganancia / v.flete_cobrado) * 100).toFixed(1)}%` : '—';
         return [
           new Date(v.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }),
-          `${v.origen || '—'} → ${v.destino || '—'}`,
-          `${v.camiones?.patente || '—'}\n${v.camiones?.marca || ''} ${v.camiones?.modelo || ''}`,
+          v.origen || '—',
+          v.destino || '—',
+          `${v.camiones?.patente || '—'}\n${(v.camiones?.marca || '')} ${(v.camiones?.modelo || '')}`.trim(),
           v.kilometros,
           v.peso_carga,
           RUTA_LABEL[v.tipo_ruta || ''] || v.tipo_ruta || '—',
@@ -286,59 +422,69 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
           `$${v.costo_por_km}`,
           v.flete_cobrado ? `$${Math.round(v.flete_cobrado).toLocaleString('es-AR')}` : '—',
           ganancia !== null ? `$${Math.round(ganancia).toLocaleString('es-AR')}` : '—',
-          ganancia !== null ? `${margen}%` : '—',
+          margen,
         ];
       });
 
       autoTable(doc, {
-        startY: y0 + 6,
+        startY: 52,
         head: [cols],
         body: rows,
-        styles: { fontSize: 7, cellPadding: 2, font: 'helvetica' },
-        headStyles: { fillColor: [26, 23, 20], textColor: 255, fontStyle: 'bold', fontSize: 7 },
-        alternateRowStyles: { fillColor: [248, 247, 245] },
+        styles: { fontSize: 7, cellPadding: { top: 2.5, right: 2, bottom: 2.5, left: 2 }, font: 'helvetica', overflow: 'linebreak' },
+        headStyles: { fillColor: DARK, textColor: [255,255,255], fontStyle: 'bold', fontSize: 7.5, cellPadding: { top: 3, right: 2, bottom: 3, left: 2 } },
+        alternateRowStyles: { fillColor: [250, 249, 247] },
         columnStyles: {
-          0: { cellWidth: 16 },
-          1: { cellWidth: 40 },
-          2: { cellWidth: 28 },
-          3: { cellWidth: 12, halign: 'right' },
-          4: { cellWidth: 12, halign: 'right' },
-          5: { cellWidth: 16 },
-          6: { cellWidth: 12, halign: 'right' },
-          7: { cellWidth: 12, halign: 'right' },
-          8: { cellWidth: 22, halign: 'right' },
-          9: { cellWidth: 16, halign: 'right' },
-          10: { cellWidth: 22, halign: 'right' },
-          11: { cellWidth: 22, halign: 'right' },
-          12: { cellWidth: 14, halign: 'right' },
+          0:  { cellWidth: 14 },
+          1:  { cellWidth: 26 },
+          2:  { cellWidth: 26 },
+          3:  { cellWidth: 24 },
+          4:  { cellWidth: 10, halign: 'right' },
+          5:  { cellWidth: 9,  halign: 'right' },
+          6:  { cellWidth: 14 },
+          7:  { cellWidth: 11, halign: 'right' },
+          8:  { cellWidth: 11, halign: 'right' },
+          9:  { cellWidth: 20, halign: 'right' },
+          10: { cellWidth: 13, halign: 'right' },
+          11: { cellWidth: 20, halign: 'right' },
+          12: { cellWidth: 20, halign: 'right' },
+          13: { cellWidth: 13, halign: 'right' },
         },
-        didDrawCell: (data) => {
-          // Color verde/rojo en columna Ganancia
-          if (data.section === 'body' && data.column.index === 11) {
-            const val = data.cell.text[0];
-            if (val && val !== '—') {
-              const isNeg = val.startsWith('-');
-              doc.setTextColor(isNeg ? 180 : 26, isNeg ? 30 : 107, isNeg ? 30 : 58);
+        willDrawCell: (data) => {
+          if (data.section === 'body') {
+            const ganIdx = 12;
+            const marIdx = 13;
+            if (data.column.index === ganIdx) {
+              const val = String(data.cell.text[0] || '');
+              if (val !== '—') doc.setTextColor(...(val.startsWith('-') ? RED : GREEN));
+            }
+            if (data.column.index === marIdx) {
+              const num = parseFloat(String(data.cell.text[0] || '0'));
+              if (!isNaN(num)) doc.setTextColor(...(num >= 25 ? GREEN : num >= 10 ? [200, 134, 10] as [number,number,number] : RED));
             }
           }
         },
         foot: [[
-          'TOTAL', '', '', totales.km, '', '', Math.round(totales.litros), '',
+          'TOTAL', '', '', `${viajesFiltrados.length} viajes`, totales.km, '', '',
+          Math.round(totales.litros), '',
           `$${Math.round(totales.costo).toLocaleString('es-AR')}`, '',
           `$${Math.round(totales.flete).toLocaleString('es-AR')}`,
-          `$${Math.round(totales.flete - totales.costo).toLocaleString('es-AR')}`,
-          totales.flete > 0 ? `${(((totales.flete - totales.costo) / totales.flete) * 100).toFixed(1)}%` : '—',
+          `$${Math.round(ganTotal).toLocaleString('es-AR')}`,
+          totales.flete > 0 ? `${(((ganTotal) / totales.flete) * 100).toFixed(1)}%` : '—',
         ]],
-        footStyles: { fillColor: [26, 23, 20], textColor: 255, fontStyle: 'bold', fontSize: 7 },
+        footStyles: { fillColor: DARK, textColor: [255,255,255], fontStyle: 'bold', fontSize: 7.5 },
       });
 
-      // Pie de página
+      // ── PIE DE PÁGINA ───────────────────────────────────────────
       const pageCount = (doc as any).internal.getNumberOfPages();
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
-        doc.setFontSize(7);
+        doc.setFillColor(...ACCENT);
+        doc.rect(0, 203, W, 1, 'F');
+        doc.setFontSize(6.5);
         doc.setTextColor(150);
-        doc.text(`FletIA — ${empresa} — Generado el ${new Date().toLocaleDateString('es-AR')} — Pág. ${i} de ${pageCount}`, 14, 205);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`FletIA — ${empresa} — ${periodoLabel}`, 14, 207);
+        doc.text(`Pág. ${i} / ${pageCount}`, W - 14, 207, { align: 'right' });
       }
 
       const fecha = new Date().toLocaleDateString('es-AR').replace(/\//g, '-');
