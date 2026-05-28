@@ -60,14 +60,19 @@ export default function LoginPage() {
         }
       } else {
         // Iniciar sesión
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: signInData, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
 
         if (error) throw error;
 
-        router.push('/dashboard');
+        const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+        if (signInData.user?.email === adminEmail) {
+          router.push('/admin');
+        } else {
+          router.push('/dashboard');
+        }
         router.refresh();
       }
     } catch (err: any) {
