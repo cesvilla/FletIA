@@ -38,19 +38,22 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login?pendiente=1', request.url));
   }
 
+  // Admin tiene acceso libre a todo (incluyendo /admin)
+  if (user && user.email === ADMIN_EMAIL) {
+    if (pathname === '/login') {
+      return NextResponse.redirect(new URL('/admin', request.url));
+    }
+    return supabaseResponse;
+  }
+
   // Logueado en /login → dashboard
   if (user && user.email_confirmed_at && pathname === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  // Admin tiene acceso libre a todo
-  if (user && user.email === ADMIN_EMAIL) {
-    return supabaseResponse;
-  }
-
   // Verificar acceso para rutas protegidas (no públicas, no admin)
   if (user && user.email_confirmed_at && !isPublic) {
-    // No verificar en /admin (ya protegida en la page)
+    // No admin → bloquear /admin
     if (pathname.startsWith('/admin')) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
