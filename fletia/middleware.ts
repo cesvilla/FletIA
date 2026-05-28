@@ -28,6 +28,14 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
+  // Admin tiene acceso libre a todo — check PRIMERO antes de cualquier otra verificación
+  if (user && user.email === ADMIN_EMAIL) {
+    if (pathname === '/login') {
+      return NextResponse.redirect(new URL('/admin', request.url));
+    }
+    return supabaseResponse;
+  }
+
   // No logueado → login
   if (!user && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url));
@@ -36,14 +44,6 @@ export async function middleware(request: NextRequest) {
   // Logueado pero email no confirmado
   if (user && !user.email_confirmed_at && !isPublic) {
     return NextResponse.redirect(new URL('/login?pendiente=1', request.url));
-  }
-
-  // Admin tiene acceso libre a todo (incluyendo /admin)
-  if (user && user.email === ADMIN_EMAIL) {
-    if (pathname === '/login') {
-      return NextResponse.redirect(new URL('/admin', request.url));
-    }
-    return supabaseResponse;
   }
 
   // Logueado en /login → dashboard
