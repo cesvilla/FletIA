@@ -68,17 +68,25 @@ export async function POST(request: Request) {
   const fecha_expiracion = new Date();
   fecha_expiracion.setDate(fecha_expiracion.getDate() + Number(dias));
 
+  // Obtener email del usuario desde auth para el upsert
   const admin = createAdminClient();
+  const { data: authUser } = await admin.auth.admin.getUserById(user_id);
+  const email = authUser?.user?.email || '';
+  const empresa = authUser?.user?.user_metadata?.empresa || '';
+
+  // Upsert: crea la fila si no existe, actualiza si ya existe
   const { error } = await admin
     .from('accesos')
-    .update({
+    .upsert({
+      user_id,
+      email,
+      empresa,
       aprobado: true,
       dias_demo: Number(dias),
       tipo: tipo || 'demo',
       fecha_aprobacion: new Date().toISOString(),
       fecha_expiracion: fecha_expiracion.toISOString(),
-    })
-    .eq('user_id', user_id);
+    }, { onConflict: 'user_id' });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, fecha_expiracion });
