@@ -13,15 +13,23 @@ export async function POST(request: Request) {
     const { data: authUser, error: authErr } = await admin.auth.admin.getUserById(user_id);
     if (authErr || !authUser) return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
 
-    // Insertar acceso pendiente solo si no existe — nunca sobreescribir uno aprobado
-    const { error } = await admin.from('accesos').upsert({
-      user_id,
-      email,
-      empresa: empresa || '',
-      aprobado: false,
-    }, { onConflict: 'user_id', ignoreDuplicates: true });
+    // Verificar si ya existe un acceso para este usuario
+    const { data: existing } = await admin
+      .from('accesos')
+      .select('id, aprobado')
+      .eq('user_id', user_id)
+      .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    // Solo insertar si no existe — nunca sobreescribir uno aprobado
+    if (!existing) {
+      const { error } = await admin.from('accesos').insert({
+        user_id,
+        email,
+        empresa: empresa || '',
+        aprobado: false,
+      });
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {

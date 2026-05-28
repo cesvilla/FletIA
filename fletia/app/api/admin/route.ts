@@ -20,14 +20,41 @@ export async function GET() {
   const admin_user = await verificarAdmin();
   if (!admin_user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
+  const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || process.env.ADMIN_EMAIL;
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from('accesos')
-    .select('*')
-    .order('created_at', { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ accesos: data });
+  // Obtener todos los usuarios de auth (sin depender de grants en accesos)
+  const { data: authData, error: authError } = await admin.auth.admin.listUsers();
+  if (authError) return NextResponse.json({ error: authError.message }, { status: 500 });
+
+  // Filtrar el admin
+  const users = (authData.users || []).filter(u => u.email !== ADMIN_EMAIL);
+
+  // Obtener accesos existentes
+  const { data: accesosData } = await admin.from('accesos').select('*');
+  const accesosMap = new Map((accesosData || []).map((a: any) => [a.user_id, a]));
+
+  // Combinar: si no tiene acceso en tabla, aparece como pendiente
+  const accesos = users.map(u => {
+    const acceso = accesosMap.get(u.id);
+    return acceso ?? {
+      id: u.id,
+      user_id: u.id,
+      email: u.email,
+      empresa: u.user_metadata?.empresa || '',
+      aprobado: false,
+      tipo: 'demo',
+      dias_demo: 15,
+      fecha_aprobacion: null,
+      fecha_expiracion: null,
+      created_at: u.created_at,
+    };
+  });
+
+  // Ordenar por fecha de creación descendente
+  accesos.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  return NextResponse.json({ accesos });
 }
 
 // POST — aprobar usuario con días de demo
