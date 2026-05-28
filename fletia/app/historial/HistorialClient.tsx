@@ -180,7 +180,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
 
       // Estilo encabezado hoja 1
       const h1 = ws1.getRow(1);
-      h1.height = 32;
+      h1.height = 22;
       h1.eachCell(cell => {
         cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A1714' } };
         cell.font   = { color: { argb: 'FFFFFFFF' }, bold: true, size: 10, name: 'Calibri' };
@@ -203,14 +203,14 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
           carga:     v.peso_carga,
           ruta:      RUTA_LABEL[v.tipo_ruta || ''] || v.tipo_ruta || '—',
           terreno:   TERRENO_LABEL[v.terreno || ''] || v.terreno || '—',
-          preciogas: v.precio_combustible || '—',
+          preciogas: v.precio_combustible ? `$${v.precio_combustible.toLocaleString('es-AR')}` : '—',
           litrosEst: Math.round(v.litros_totales),
           litrosReal:v.litros_reales ? Math.round(v.litros_reales) : '—',
           consumo:   v.consumo_real || '—',
-          costo:     Math.round(v.costo_total),
-          costokm:   v.costo_por_km,
-          flete:     v.flete_cobrado ? Math.round(v.flete_cobrado) : '—',
-          ganancia:  ganancia !== null ? Math.round(ganancia) : '—',
+          costo:     `$${Math.round(v.costo_total).toLocaleString('es-AR')}`,
+          costokm:   `$${v.costo_por_km}`,
+          flete:     v.flete_cobrado ? `$${Math.round(v.flete_cobrado).toLocaleString('es-AR')}` : '—',
+          ganancia:  ganancia !== null ? `$${Math.round(ganancia).toLocaleString('es-AR')}` : '—',
           margen:    margen !== null ? `${margen.toFixed(1)}%` : '—',
           fpeso:     v.factor_peso || '—',
           fruta:     v.factor_ruta || '—',
@@ -220,7 +220,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
         });
 
         const bgColor = i % 2 === 0 ? 'FFFFFFFF' : 'FFFAF9F7';
-        row.height = 28;
+        row.height = 16;
         row.eachCell((cell, colNumber) => {
           cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
           cell.font   = { size: 9, name: 'Calibri' };
@@ -239,7 +239,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
         // IA con texto completo y altura auto
         const iaCell = row.getCell(24);
         iaCell.alignment = { wrapText: true, vertical: 'top' };
-        if (v.descripcion_ia && v.descripcion_ia.length > 80) row.height = 52;
+        if (v.descripcion_ia && v.descripcion_ia.length > 80) row.height = 36;
       });
 
       // Fila TOTALES hoja 1
@@ -249,13 +249,13 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
         fecha: 'TOTAL', origen: '', destino: '', patente: '', marca: '', modelo: '',
         km: totales.km, carga: '', ruta: '', terreno: '', preciogas: '',
         litrosEst: Math.round(totales.litros), litrosReal: '', consumo: '',
-        costo: Math.round(totales.costo), costokm: '',
-        flete: Math.round(totales.flete),
-        ganancia: Math.round(gananciaTotal),
+        costo: `$${Math.round(totales.costo).toLocaleString('es-AR')}`, costokm: '',
+        flete: `$${Math.round(totales.flete).toLocaleString('es-AR')}`,
+        ganancia: `$${Math.round(gananciaTotal).toLocaleString('es-AR')}`,
         margen: totales.flete > 0 ? `${margenTotal}%` : '—',
         fpeso: '', fruta: '', fterreno: '', pctcarga: '', ia: `${viajesFiltrados.length} viajes`,
       });
-      totRow.height = 28;
+      totRow.height = 20;
       totRow.eachCell(cell => {
         cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A1714' } };
         cell.font   = { color: { argb: 'FFFFFFFF' }, bold: true, size: 10, name: 'Calibri' };
@@ -278,7 +278,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
         { header: 'Margen promedio (%)',  key: 'margen',   width: 20 },
       ];
       const h2 = ws2.getRow(1);
-      h2.height = 32;
+      h2.height = 22;
       h2.eachCell(cell => {
         cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD4440C' } };
         cell.font   = { color: { argb: 'FFFFFFFF' }, bold: true, size: 10, name: 'Calibri' };
@@ -304,12 +304,12 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
           viajes:   r.viajes,
           km:       r.km,
           litros:   Math.round(r.litros),
-          costo:    Math.round(r.costo),
-          flete:    Math.round(r.flete),
-          ganancia: Math.round(gan),
+          costo:    `$${Math.round(r.costo).toLocaleString('es-AR')}`,
+          flete:    `$${Math.round(r.flete).toLocaleString('es-AR')}`,
+          ganancia: `$${Math.round(gan).toLocaleString('es-AR')}`,
           margen:   r.flete > 0 ? `${(((gan) / r.flete) * 100).toFixed(1)}%` : '—',
         });
-        row.height = 22;
+        row.height = 16;
         row.eachCell((cell, col) => {
           cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: i % 2 === 0 ? 'FFFFFFFF' : 'FFFAF9F7' } };
           cell.font   = { size: 10, name: 'Calibri' };
