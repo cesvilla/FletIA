@@ -92,7 +92,6 @@ export default function LandingPage() {
                 { icon: '💰', title: 'Rentabilidad por viaje',  desc: 'Ganancia y margen neto al instante' },
                 { icon: '📋', title: 'Historial de viajes',     desc: 'Todos los viajes con filtros y búsqueda' },
                 { icon: '🚛', title: 'Exportar por camión',     desc: 'Excel y PDF filtrado por unidad de tu flota' },
-                { icon: '⛽', title: 'Gasoil actualizado',      desc: 'Precio del combustible actualizado cada día' },
                 { icon: '📱', title: 'Sin hardware',            desc: 'Funciona desde el celular, sin GPS ni app' },
               ].map((f) => (
                 <div key={f.title} style={{
