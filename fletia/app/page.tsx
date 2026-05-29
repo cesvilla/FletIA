@@ -1,11 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Link from 'next/link';
 
 export default function LandingPage() {
-  const [menuOpen, setMenuOpen] = useState(false);
-
   useEffect(() => {
     const els = document.querySelectorAll('.reveal, .reveal-stagger');
     if (!('IntersectionObserver' in window)) {
@@ -31,12 +29,6 @@ export default function LandingPage() {
     <>
       
 
-      <div className={`mobile-menu${menuOpen ? ' open' : ''}`}>
-        <Link href="/login" onClick={() => setMenuOpen(false)}>Iniciar sesión</Link>
-        <div className="divider"></div>
-        <Link href="/registro" className="accent" onClick={() => setMenuOpen(false)}>⚡ Empezar gratis</Link>
-      </div>
-
       <div className="atmos" aria-hidden="true">
         <div className="horizon-glow"></div>
       </div>
@@ -54,9 +46,6 @@ export default function LandingPage() {
             <Link href="/login" className="btn ghost">Iniciar sesión</Link>
             <Link href="/registro" className="btn primary">Empezar gratis →</Link>
           </div>
-          <button className={`hamburger${menuOpen ? ' open' : ''}`} onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
-            <span></span><span></span><span></span>
-          </button>
         </nav>
 
         <section className="hero">
