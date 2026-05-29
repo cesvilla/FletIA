@@ -15,7 +15,20 @@ interface SegmentoTrafico {
   color: string;
   demora: number;           // minutos extra REALES (de TomTom) en el tramo monitoreado
   incidentes: Incidente[];
+  numIncidentes: number;    // cantidad de incidentes en el tramo (para el badge de la tarjeta)
   bajaCobertua: boolean;    // true si TomTom no tiene datos de flujo del tramo
+}
+
+interface ResumenTipo {
+  tipo: string;
+  emoji: string;
+  cantidad: number;
+}
+
+interface ZonaTrafico {
+  zona: string;             // "Ciudad, Provincia" — la ruta/zona por la que pasa el camión
+  totalIncidentes: number;
+  tipos: ResumenTipo[];     // desglose por tipo dentro de la zona (sin detalle de calles)
 }
 
 interface Incidente {
@@ -162,7 +175,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const PUNTOS = Math.min(6, polyline.length);
+    const PUNTOS = Math.min(8, polyline.length);
     const muestras = muestrarPuntos(polyline, PUNTOS);
 
     // Geocodificar nombres de los tramos
@@ -196,6 +209,7 @@ export async function POST(request: Request) {
           color,
           demora,
           incidentes,
+          numIncidentes: 0,
           bajaCobertua: sinDatos,
         };
       })
@@ -211,7 +225,47 @@ export async function POST(request: Request) {
         vistos.add(clave);
         return true;
       });
+      seg.numIncidentes = seg.incidentes.length;
       totalIncidentes += seg.incidentes.length;
+    }
+
+    // ── Agregación: por TIPO (global) y por ZONA (provincia/ruta) ───────────────
+    // No mostramos calles: agrupamos por tipo de incidente y por la zona/ruta
+    // (Ciudad, Provincia) por la que pasa el camión, con su conteo.
+    const tiposGlobal = new Map<string, ResumenTipo>();
+    const zonasMap = new Map<string, { zona: string; totalIncidentes: number; tipos: Map<string, ResumenTipo> }>();
+
+    for (const seg of segmentos) {
+      if (seg.incidentes.length === 0) continue;
+      const zonaNombre = seg.nombre || 'En ruta';
+      if (!zonasMap.has(zonaNombre)) {
+        zonasMap.set(zonaNombre, { zona: zonaNombre, totalIncidentes: 0, tipos: new Map() });
+      }
+      const zona = zonasMap.get(zonaNombre)!;
+      for (const inc of seg.incidentes) {
+        const g = tiposGlobal.get(inc.tipo) ?? { tipo: inc.tipo, emoji: inc.emoji, cantidad: 0 };
+        g.cantidad++;
+        tiposGlobal.set(inc.tipo, g);
+
+        zona.totalIncidentes++;
+        const z = zona.tipos.get(inc.tipo) ?? { tipo: inc.tipo, emoji: inc.emoji, cantidad: 0 };
+        z.cantidad++;
+        zona.tipos.set(inc.tipo, z);
+      }
+    }
+
+    const resumenTipos: ResumenTipo[] = [...tiposGlobal.values()].sort((a, b) => b.cantidad - a.cantidad);
+    const zonas: ZonaTrafico[] = [...zonasMap.values()]
+      .map(z => ({
+        zona: z.zona,
+        totalIncidentes: z.totalIncidentes,
+        tipos: [...z.tipos.values()].sort((a, b) => b.cantidad - a.cantidad),
+      }))
+      .sort((a, b) => b.totalIncidentes - a.totalIncidentes);
+
+    // Aligeramos el payload: las tarjetas ya no listan calles (solo el conteo).
+    for (const seg of segmentos) {
+      seg.incidentes = [];
     }
 
     return NextResponse.json({
@@ -220,6 +274,8 @@ export async function POST(request: Request) {
       totalIncidentes,
       demoraTotal: segmentos.reduce((n, s) => n + s.demora, 0),
       tramosConBajaCobertura: segmentos.filter(s => s.bajaCobertua).length,
+      resumenTipos,
+      zonas,
     });
 
   } catch (error: any) {

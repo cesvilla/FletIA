@@ -87,11 +87,13 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   } | null>(null);
   const [loadingClima, setLoadingClima] = useState(false);
   const [traficoRuta, setTraficoRuta] = useState<{
-    segmentos: { lat: number; lon: number; nombre: string; velocidadActual: number; velocidadLibre: number; nivel: string; emoji: string; color: string; demora: number; bajaCobertua: boolean; incidentes: { tipo: string; emoji: string; descripcion: string; gravedad: number }[] }[];
+    segmentos: { lat: number; lon: number; nombre: string; velocidadActual: number; velocidadLibre: number; nivel: string; emoji: string; color: string; demora: number; bajaCobertua: boolean; numIncidentes: number; incidentes: { tipo: string; emoji: string; descripcion: string; gravedad: number }[] }[];
     totalIncidentes: number;
     demoraTotal: number;
     tramosConBajaCobertura: number;
     disponible: boolean;
+    resumenTipos: { tipo: string; emoji: string; cantidad: number }[];
+    zonas: { zona: string; totalIncidentes: number; tipos: { tipo: string; emoji: string; cantidad: number }[] }[];
   } | null>(null);
   const [loadingTrafico, setLoadingTrafico] = useState(false);
   const [climaDetalle, setClimaDetalle] = useState<{
@@ -1713,20 +1715,26 @@ type SegmentoTrafico = {
   nivel: string; emoji: string; color: string;
   demora: number;
   bajaCobertua: boolean;
+  numIncidentes: number;
   incidentes: { tipo: string; emoji: string; descripcion: string; gravedad: number }[];
 };
+type ResumenTipo = { tipo: string; emoji: string; cantidad: number };
+type ZonaTrafico = { zona: string; totalIncidentes: number; tipos: ResumenTipo[] };
 type TraficoRutaData = {
   segmentos: SegmentoTrafico[];
   totalIncidentes: number;
   demoraTotal: number;
   tramosConBajaCobertura: number;
   disponible: boolean;
+  resumenTipos: ResumenTipo[];
+  zonas: ZonaTrafico[];
 };
 
 function TraficoWidget({ loading, traficoRuta }: {
   loading: boolean;
   traficoRuta: TraficoRutaData | null;
 }) {
+  const [verDesglose, setVerDesglose] = useState(false);
   const tieneProblemas = (traficoRuta?.totalIncidentes ?? 0) > 0 ||
     traficoRuta?.segmentos.some(s => s.nivel === 'lento' || s.nivel === 'congestionado');
 
@@ -1812,15 +1820,15 @@ function TraficoWidget({ loading, traficoRuta }: {
                     </div>
                   )}
 
-                  {/* Incidentes */}
-                  {s.incidentes.map((inc, j) => (
-                    <div key={j} style={{ marginTop: 4, background: 'rgba(212,68,12,0.08)', borderRadius: 4, padding: '3px 5px' }}>
-                      <div style={{ fontSize: 12 }}>{inc.emoji}</div>
-                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 8, color: '#d4440c', lineHeight: 1.3 }}>
-                        {inc.tipo}
+                  {/* Incidentes — solo el conteo del tramo (sin detalle de calles) */}
+                  {s.numIncidentes > 0 && (
+                    <div style={{ marginTop: 4, background: 'rgba(212,68,12,0.08)', borderRadius: 4, padding: '3px 5px' }}>
+                      <div style={{ fontSize: 12 }}>⚠️</div>
+                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 8, color: '#d4440c', lineHeight: 1.3, fontWeight: 700 }}>
+                        {s.numIncidentes} incid.
                       </div>
                     </div>
-                  ))}
+                  )}
 
                   {/* Nombre tramo */}
                   <div style={{ marginTop: 6, fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#4a4540', lineHeight: 1.2 }}>
@@ -1837,19 +1845,56 @@ function TraficoWidget({ loading, traficoRuta }: {
               ))}
             </div>
 
-            {/* Resumen incidentes — detalle real con ubicación */}
+            {/* Resumen incidentes — agrupado por tipo, desglose por zona detrás de un botón */}
             {traficoRuta.totalIncidentes > 0 ? (
               <div style={{ marginTop: 10, padding: '8px 12px', background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#856404', lineHeight: 1.5 }}>
-                <div style={{ marginBottom: 6 }}>
+                <div style={{ marginBottom: 8 }}>
                   ⚠️ <strong>{traficoRuta.totalIncidentes} incidente{traficoRuta.totalIncidentes > 1 ? 's' : ''}</strong> activo{traficoRuta.totalIncidentes > 1 ? 's' : ''} en la ruta
-                  {traficoRuta.demoraTotal > 0 && <> · demora real <strong>+{traficoRuta.demoraTotal} min</strong></>}:
+                  {traficoRuta.demoraTotal > 0 && <> · demora real <strong>+{traficoRuta.demoraTotal} min</strong></>}.
                 </div>
-                {traficoRuta.segmentos.flatMap(s => s.incidentes).map((inc, k) => (
-                  <div key={k} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', padding: '2px 0' }}>
-                    <span style={{ flexShrink: 0 }}>{inc.emoji}</span>
-                    <span><strong>{inc.tipo}</strong>{inc.descripcion && inc.descripcion !== inc.tipo ? `: ${inc.descripcion.replace(inc.tipo, '').replace(/^[\s—:]+/, '')}` : ''}</span>
+
+                {/* Resumen por TIPO (chips con icono + conteo) */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {traficoRuta.resumenTipos.map((t, k) => (
+                    <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(212,68,12,0.10)', border: '1px solid rgba(212,68,12,0.25)', borderRadius: 999, padding: '3px 9px', fontSize: 11, color: '#8a3a08', fontWeight: 600 }}>
+                      <span>{t.emoji}</span>
+                      <span>{t.tipo}</span>
+                      <span style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700 }}>{t.cantidad}</span>
+                    </span>
+                  ))}
+                </div>
+
+                {/* Botón: ver desglose por zona/ruta */}
+                {traficoRuta.zonas.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setVerDesglose(v => !v)}
+                    style={{ marginTop: 8, background: 'transparent', border: '1px solid rgba(133,100,4,0.4)', borderRadius: 6, padding: '5px 10px', fontFamily: 'DM Mono, monospace', fontSize: 11, fontWeight: 700, color: '#856404', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    {verDesglose ? '▾ Ocultar desglose' : `▸ Ver desglose por zona (${traficoRuta.zonas.length})`}
+                  </button>
+                )}
+
+                {/* Desglose por ZONA/RUTA (provincia) — sin detalle de calles */}
+                {verDesglose && (
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {traficoRuta.zonas.map((z, k) => (
+                      <div key={k} style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(133,100,4,0.2)', borderRadius: 6, padding: '7px 10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                          <span style={{ fontWeight: 700, color: '#5a3000' }}>📍 {z.zona}</span>
+                          <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, fontWeight: 700, color: '#d4440c', flexShrink: 0 }}>{z.totalIncidentes} incid.</span>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                          {z.tipos.map((t, j) => (
+                            <span key={j} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'rgba(212,68,12,0.08)', borderRadius: 999, padding: '2px 7px', fontSize: 10, color: '#8a3a08' }}>
+                              <span>{t.emoji}</span><span>{t.tipo}</span><span style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700 }}>{t.cantidad}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             ) : (
               <div style={{ marginTop: 10, padding: '8px 12px', background: '#f1f8f1', border: '1px solid #c8e6c9', borderRadius: 6, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#2e7d32' }}>
