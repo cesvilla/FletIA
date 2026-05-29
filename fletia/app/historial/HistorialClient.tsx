@@ -54,6 +54,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<{ id: string; texto: string; ok: boolean } | null>(null);
   const [mesSeleccionado, setMesSeleccionado] = useState('');
+  const [camionSeleccionado, setCamionSeleccionado] = useState('');
   const [exportando, setExportando] = useState<'pdf' | 'excel' | null>(null);
 
   // Meses únicos disponibles
@@ -62,11 +63,23 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
     return Array.from(set).sort().reverse();
   }, [viajes]);
 
-  // Viajes filtrados por mes
+  // Camiones únicos disponibles
+  const camionesDisponibles = useMemo(() => {
+    const map = new Map<string, { patente: string; marca: string; modelo: string }>();
+    viajes.forEach(v => {
+      if (v.camiones?.patente) map.set(v.camiones.patente, v.camiones);
+    });
+    return Array.from(map.values()).sort((a, b) => a.patente.localeCompare(b.patente));
+  }, [viajes]);
+
+  // Viajes filtrados por mes y/o camión
   const viajesFiltrados = useMemo(() => {
-    if (!mesSeleccionado) return viajes;
-    return viajes.filter(v => v.created_at.startsWith(mesSeleccionado));
-  }, [viajes, mesSeleccionado]);
+    return viajes.filter(v => {
+      if (mesSeleccionado && !v.created_at.startsWith(mesSeleccionado)) return false;
+      if (camionSeleccionado && v.camiones?.patente !== camionSeleccionado) return false;
+      return true;
+    });
+  }, [viajes, mesSeleccionado, camionSeleccionado]);
 
   // Totales del filtro actual
   const totales = useMemo(() => ({
@@ -145,7 +158,10 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
       wb.creator = 'FletIA';
       wb.created = new Date();
 
-      const periodoLabel = mesSeleccionado ? formatMes(mesSeleccionado) : 'Todos los meses';
+      const periodoLabel = [
+        mesSeleccionado ? formatMes(mesSeleccionado) : 'Todos los meses',
+        camionSeleccionado ? `Camión ${camionSeleccionado}` : '',
+      ].filter(Boolean).join(' · ');
       const borderStyle: any = { style: 'thin', color: { argb: 'FFE0DDD8' } };
       const border = { top: borderStyle, left: borderStyle, bottom: borderStyle, right: borderStyle };
 
@@ -180,7 +196,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
 
       // Estilo encabezado hoja 1
       const h1 = ws1.getRow(1);
-      h1.height = 22;
+      h1.height = 18;
       h1.eachCell(cell => {
         cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A1714' } };
         cell.font   = { color: { argb: 'FFFFFFFF' }, bold: true, size: 10, name: 'Calibri' };
@@ -220,7 +236,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
         });
 
         const bgColor = i % 2 === 0 ? 'FFFFFFFF' : 'FFFAF9F7';
-        row.height = 16;
+        row.height = 13;
         row.eachCell((cell, colNumber) => {
           cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
           cell.font   = { size: 9, name: 'Calibri' };
@@ -239,7 +255,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
         // IA con texto completo y altura auto
         const iaCell = row.getCell(24);
         iaCell.alignment = { wrapText: true, vertical: 'top' };
-        if (v.descripcion_ia && v.descripcion_ia.length > 80) row.height = 36;
+        if (v.descripcion_ia && v.descripcion_ia.length > 80) row.height = 26;
       });
 
       // Fila TOTALES hoja 1
@@ -255,7 +271,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
         margen: totales.flete > 0 ? `${margenTotal}%` : '—',
         fpeso: '', fruta: '', fterreno: '', pctcarga: '', ia: `${viajesFiltrados.length} viajes`,
       });
-      totRow.height = 20;
+      totRow.height = 15;
       totRow.eachCell(cell => {
         cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A1714' } };
         cell.font   = { color: { argb: 'FFFFFFFF' }, bold: true, size: 10, name: 'Calibri' };
@@ -278,7 +294,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
         { header: 'Margen promedio (%)',  key: 'margen',   width: 20 },
       ];
       const h2 = ws2.getRow(1);
-      h2.height = 22;
+      h2.height = 18;
       h2.eachCell(cell => {
         cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD4440C' } };
         cell.font   = { color: { argb: 'FFFFFFFF' }, bold: true, size: 10, name: 'Calibri' };
@@ -309,7 +325,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
           ganancia: `$${Math.round(gan).toLocaleString('es-AR')}`,
           margen:   r.flete > 0 ? `${(((gan) / r.flete) * 100).toFixed(1)}%` : '—',
         });
-        row.height = 16;
+        row.height = 13;
         row.eachCell((cell, col) => {
           cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: i % 2 === 0 ? 'FFFFFFFF' : 'FFFAF9F7' } };
           cell.font   = { size: 10, name: 'Calibri' };
@@ -341,7 +357,10 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
       const { default: jsPDF } = await import('jspdf');
       const { default: autoTable } = await import('jspdf-autotable');
 
-      const periodoLabel = mesSeleccionado ? formatMes(mesSeleccionado) : 'Todos los meses';
+      const periodoLabel = [
+        mesSeleccionado ? formatMes(mesSeleccionado) : 'Todos los meses',
+        camionSeleccionado ? `Camión ${camionSeleccionado}` : '',
+      ].filter(Boolean).join(' · ');
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const ACCENT  = [212, 68, 12]  as [number,number,number];
       const DARK    = [26, 23, 20]   as [number,number,number];
@@ -570,6 +589,24 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                     ))}
                   </select>
                 </div>
+
+                {camionesDisponibles.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <label className="font-mono text-[9px] text-ink-3 uppercase tracking-widest">Camión:</label>
+                    <select
+                      value={camionSeleccionado}
+                      onChange={e => { setCamionSeleccionado(e.target.value); setExpandido(null); }}
+                      className="text-sm px-3 py-1.5 border border-ink/20 bg-card text-ink outline-none focus:border-accent"
+                    >
+                      <option value="">Todos los camiones</option>
+                      {camionesDisponibles.map(c => (
+                        <option key={c.patente} value={c.patente}>
+                          {c.patente} — {c.marca} {c.modelo}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div className="flex gap-2 ml-auto">
                   <button
