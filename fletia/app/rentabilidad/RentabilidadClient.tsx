@@ -11,6 +11,7 @@ interface Viaje {
   kilometros: number;
   peso_carga: number;
   costo_total: number;
+  peajes_total: number | null;
   litros_totales: number;
   costo_por_km: number;
   flete_cobrado: number;
@@ -37,12 +38,15 @@ export default function RentabilidadClient({ viajes, empresa, email }: Props) {
     router.refresh();
   }
 
+  // Costo real del viaje = combustible + peajes (los peajes ya están guardados por viaje)
+  const costoReal = (v: Viaje) => v.costo_total + (v.peajes_total ?? 0);
+
   const totalFlete = viajes.reduce((a, v) => a + v.flete_cobrado, 0);
-  const totalCosto = viajes.reduce((a, v) => a + v.costo_total, 0);
+  const totalCosto = viajes.reduce((a, v) => a + costoReal(v), 0);
   const totalGanancia = totalFlete - totalCosto;
   const margenPromedio = totalFlete > 0 ? ((totalGanancia / totalFlete) * 100) : 0;
 
-  const viajesRentables = viajes.filter(v => v.flete_cobrado > v.costo_total).length;
+  const viajesRentables = viajes.filter(v => v.flete_cobrado > costoReal(v)).length;
   const viajesNegativos = viajes.length - viajesRentables;
 
   return (
@@ -115,7 +119,7 @@ export default function RentabilidadClient({ viajes, empresa, email }: Props) {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
                 {[
                   { label: 'Flete total cobrado', value: `$${totalFlete.toLocaleString('es-AR')}`, color: '#1a1714' },
-                  { label: 'Costo combustible', value: `$${totalCosto.toLocaleString('es-AR')}`, color: '#d4440c' },
+                  { label: 'Costo (comb.+peajes)', value: `$${totalCosto.toLocaleString('es-AR')}`, color: '#d4440c' },
                   { label: 'Ganancia neta', value: `$${totalGanancia.toLocaleString('es-AR')}`, color: totalGanancia >= 0 ? '#1a6b3a' : '#d4440c' },
                   { label: 'Margen promedio', value: `${margenPromedio.toFixed(1)}%`, color: margenPromedio >= 20 ? '#1a6b3a' : margenPromedio >= 10 ? '#c8860a' : '#d4440c' },
                 ].map((kpi, i) => (
@@ -145,7 +149,7 @@ export default function RentabilidadClient({ viajes, empresa, email }: Props) {
                 </div>
                 <div>
                   {viajes.map((v, i) => {
-                    const ganancia = v.flete_cobrado - v.costo_total;
+                    const ganancia = v.flete_cobrado - costoReal(v);
                     const margen = ((ganancia / v.flete_cobrado) * 100).toFixed(1);
                     const rentable = ganancia >= 0;
                     return (
