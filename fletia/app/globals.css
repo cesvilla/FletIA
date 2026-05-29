@@ -782,6 +782,9 @@ footer {
   .cta-row .btn { text-align: center; justify-content: center; }
   .price { padding: 28px 20px; }
 }
+@media (max-width: 400px) {
+  .features-grid { grid-template-columns: 1fr !important; }
+}
 
 /* ── Override body background for landing ── */
 body:has(.shell) {

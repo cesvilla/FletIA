@@ -68,11 +68,60 @@ export default function LandingPage() {
             <Link href="/login" className="btn ghost lg">Ya tengo cuenta</Link>
             <div className="cta-meta">✓ Sin tarjeta &nbsp;·&nbsp; ✓ Cancelás cuando querés</div>
           </div>
-          <div className="stats reveal-stagger">
-            <div className="stat"><div className="k">100%</div><div className="l">Web · sin app</div></div>
-            <div className="stat"><div className="k">0<span className="u">hw</span></div><div className="l">Sin GPS ni dispositivos</div></div>
-            <div className="stat"><div className="k">∞</div><div className="l">Camiones y viajes</div></div>
-            <div className="stat"><div className="k">15d</div><div className="l">Prueba completa gratis</div></div>
+          {/* Funcionalidades de la plataforma */}
+          <div className="reveal-stagger" style={{ maxWidth: '680px' }}>
+            <div style={{
+              fontFamily: 'DM Mono, monospace',
+              fontSize: '0.7rem',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              color: 'rgba(240,237,232,0.3)',
+              marginBottom: '14px',
+            }}>// Todo lo que incluye la plataforma</div>
+            <div className="features-grid" style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '8px',
+            }}>
+              {[
+                { icon: '🗺️', title: 'Mapa de ruta',           desc: 'Trazado visual del recorrido antes de salir' },
+                { icon: '🌤️', title: 'Clima en ruta',           desc: 'Pronóstico real por puntos del trayecto' },
+                { icon: '🚦', title: 'Tráfico en tiempo real',  desc: 'Demoras e incidentes sobre tu ruta' },
+                { icon: '⚡', title: 'Calculadora con IA',      desc: 'Costo exacto según peso, ruta y terreno' },
+                { icon: '🤖', title: 'IA que aprende',          desc: 'Se ajusta con los litros reales de cada viaje' },
+                { icon: '💰', title: 'Rentabilidad por viaje',  desc: 'Ganancia y margen neto al instante' },
+                { icon: '📋', title: 'Historial de viajes',     desc: 'Todos los viajes con filtros y búsqueda' },
+                { icon: '🚛', title: 'Exportar por camión',     desc: 'Excel y PDF filtrado por unidad de tu flota' },
+                { icon: '⛽', title: 'Gasoil actualizado',      desc: 'Precio del combustible actualizado cada día' },
+                { icon: '📱', title: 'Sin hardware',            desc: 'Funciona desde el celular, sin GPS ni app' },
+              ].map((f) => (
+                <div key={f.title} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '10px 14px',
+                  background: 'rgba(240,237,232,0.04)',
+                  border: '1px solid rgba(240,237,232,0.09)',
+                  borderRadius: '10px',
+                  transition: 'border-color 0.2s, background 0.2s',
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(235,75,21,0.35)';
+                  (e.currentTarget as HTMLDivElement).style.background = 'rgba(235,75,21,0.05)';
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(240,237,232,0.09)';
+                  (e.currentTarget as HTMLDivElement).style.background = 'rgba(240,237,232,0.04)';
+                }}
+                >
+                  <span style={{ fontSize: '1.15rem', flexShrink: 0 }}>{f.icon}</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#f0ede8', lineHeight: '1.2' }}>{f.title}</div>
+                    <div style={{ fontSize: '0.71rem', color: 'rgba(240,237,232,0.38)', lineHeight: '1.3', marginTop: '2px' }}>{f.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
