@@ -47,6 +47,16 @@ interface ZonaTrafico {
   tipos: ResumenTipo[];     // desglose por tipo dentro de la zona (sin detalle de calles)
 }
 
+interface CorteRuta {
+  tipo: string;             // "Ruta cerrada" / "Carril cerrado"
+  emoji: string;
+  zona: string;             // "Ciudad, Provincia" donde está el corte
+  ubicacion: string;        // tramo concreto del corte (calle/ruta → calle/ruta)
+}
+
+// Tipos de incidente que son cortes/cierres de ruta (los importantes para el chofer)
+const TIPOS_CORTE = new Set(['Ruta cerrada', 'Carril cerrado']);
+
 interface Incidente {
   tipo: string;
   emoji: string;
@@ -250,6 +260,7 @@ export async function POST(request: Request) {
     // (Ciudad, Provincia) por la que pasa el camión, con su conteo.
     const tiposGlobal = new Map<string, ResumenTipo>();
     const zonasMap = new Map<string, { zona: string; totalIncidentes: number; tipos: Map<string, ResumenTipo> }>();
+    const cortes: CorteRuta[] = [];
 
     for (const seg of segmentos) {
       if (seg.incidentes.length === 0) continue;
@@ -267,6 +278,19 @@ export async function POST(request: Request) {
         const z = zona.tipos.get(inc.tipo) ?? { tipo: inc.tipo, emoji: inc.emoji, cantidad: 0 };
         z.cantidad++;
         zona.tipos.set(inc.tipo, z);
+
+        // Cortes de ruta: SÍ guardamos la ubicación concreta para que el chofer sepa dónde
+        if (TIPOS_CORTE.has(inc.tipo)) {
+          const ubic = inc.descripcion && inc.descripcion !== inc.tipo
+            ? inc.descripcion.replace(inc.tipo, '').replace(/^[\s—:]+/, '').trim()
+            : '';
+          cortes.push({
+            tipo: inc.tipo,
+            emoji: inc.emoji,
+            zona: zonaNombre,
+            ubicacion: ubic || zonaNombre,
+          });
+        }
       }
     }
 
@@ -292,6 +316,7 @@ export async function POST(request: Request) {
       tramosConBajaCobertura: segmentos.filter(s => s.bajaCobertua).length,
       resumenTipos,
       zonas,
+      cortes,
     });
 
   } catch (error: any) {

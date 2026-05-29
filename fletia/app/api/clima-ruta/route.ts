@@ -137,8 +137,8 @@ export async function POST(request: Request) {
         const [climaRes, nombre] = await Promise.all([
           fetch(
             `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-            `&current=temperature_2m,precipitation,windspeed_10m,weathercode,is_day` +
-            `&timezone=America%2FArgentina%2FBuenos_Aires&models=gfs_seamless`
+            `&current=temperature_2m,apparent_temperature,precipitation,windspeed_10m,weathercode,is_day` +
+            `&timezone=America%2FArgentina%2FBuenos_Aires`
           ),
           nombreFijo ? Promise.resolve(nombreFijo) : reversGeocode(lat, lon, km, esExtremo),
         ]);
@@ -152,6 +152,7 @@ export async function POST(request: Request) {
         const viento = current.windspeed_10m as number;
         const lluvia = current.precipitation as number;
         const temp = current.temperature_2m as number;
+        const sensacion = (current.apparent_temperature ?? temp) as number;
 
         // Factor viento adicional
         let factorViento = 0;
@@ -166,6 +167,7 @@ export async function POST(request: Request) {
           lon,
           nombre,
           temp: Math.round(temp),
+          sensacion: Math.round(sensacion),
           lluvia: Math.round(lluvia * 10) / 10,
           viento: Math.round(viento),
           condicion: wmo.label,

@@ -80,7 +80,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   const [animando, setAnimando] = useState(false);
   const [modalIA, setModalIA] = useState<string | null>(null);
   const [climaRuta, setClimaRuta] = useState<{
-    puntos: { lat: number; lon: number; nombre: string; temp: number; lluvia: number; viento: number; condicion: string; emoji: string; factorImpacto: number; impactoPct: number }[];
+    puntos: { lat: number; lon: number; nombre: string; temp: number; sensacion?: number; lluvia: number; viento: number; condicion: string; emoji: string; factorImpacto: number; impactoPct: number }[];
     factorMaximo: number;
     impactoMaximoPct: number;
     tieneAlertas: boolean;
@@ -94,6 +94,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     disponible: boolean;
     resumenTipos: { tipo: string; emoji: string; cantidad: number }[];
     zonas: { zona: string; totalIncidentes: number; tipos: { tipo: string; emoji: string; cantidad: number }[] }[];
+    cortes: { tipo: string; emoji: string; zona: string; ubicacion: string }[];
   } | null>(null);
   const [loadingTrafico, setLoadingTrafico] = useState(false);
   const [climaDetalle, setClimaDetalle] = useState<{
@@ -313,7 +314,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
         `&current=apparent_temperature,weathercode,windspeed_10m,precipitation,relativehumidity_2m,is_day` +
         `&hourly=temperature_2m,weathercode,precipitation_probability,is_day` +
         `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,precipitation_probability_max` +
-        `&timezone=America%2FArgentina%2FBuenos_Aires&forecast_days=5&models=gfs_seamless`
+        `&timezone=America%2FArgentina%2FBuenos_Aires&forecast_days=5`
       );
       const data = await res.json();
 
@@ -1735,6 +1736,7 @@ type SegmentoTrafico = {
 };
 type ResumenTipo = { tipo: string; emoji: string; cantidad: number };
 type ZonaTrafico = { zona: string; totalIncidentes: number; tipos: ResumenTipo[] };
+type CorteRuta = { tipo: string; emoji: string; zona: string; ubicacion: string };
 type TraficoRutaData = {
   segmentos: SegmentoTrafico[];
   totalIncidentes: number;
@@ -1743,6 +1745,7 @@ type TraficoRutaData = {
   disponible: boolean;
   resumenTipos: ResumenTipo[];
   zonas: ZonaTrafico[];
+  cortes: CorteRuta[];
 };
 
 function TraficoWidget({ loading, traficoRuta }: {
@@ -1750,6 +1753,8 @@ function TraficoWidget({ loading, traficoRuta }: {
   traficoRuta: TraficoRutaData | null;
 }) {
   const [verDesglose, setVerDesglose] = useState(false);
+  const [verCortes, setVerCortes] = useState(false);
+  const cortes = traficoRuta?.cortes ?? [];
   const tieneProblemas = (traficoRuta?.totalIncidentes ?? 0) > 0 ||
     traficoRuta?.segmentos.some(s => s.nivel === 'lento' || s.nivel === 'congestionado');
 
@@ -1797,6 +1802,35 @@ function TraficoWidget({ loading, traficoRuta }: {
 
         {traficoRuta && !loading && traficoRuta.disponible && (
           <>
+            {/* ── Cortes de ruta — lo más importante, arriba de todo ── */}
+            {cortes.length > 0 && (
+              <div style={{ marginBottom: 10, padding: '9px 12px', background: '#fdecec', border: '1.5px solid #d4440c', borderRadius: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setVerCortes(v => !v)}
+                  style={{ width: '100%', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 700, color: '#a8350a' }}
+                >
+                  <span>🚫 {cortes.length} corte{cortes.length > 1 ? 's' : ''} de ruta en el trayecto</span>
+                  <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11 }}>{verCortes ? '▾ ocultar' : '▸ ver dónde'}</span>
+                </button>
+                {verCortes && (
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {cortes.map((c, k) => (
+                      <div key={k} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: 'rgba(255,255,255,0.7)', borderRadius: 6, padding: '6px 9px' }}>
+                        <span style={{ fontSize: 16, flexShrink: 0 }}>{c.emoji}</span>
+                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#5a1a05', lineHeight: 1.4 }}>
+                          <strong>{c.tipo}</strong> — 📍 {c.zona}
+                          {c.ubicacion && c.ubicacion !== c.zona && (
+                            <><br /><span style={{ color: '#8a3a08' }}>{c.ubicacion}</span></>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'thin', scrollbarColor: '#1a6b3a #f0ede8' }}>
               {traficoRuta.segmentos.map((s, i) => (
                 <div
@@ -1936,7 +1970,7 @@ function TraficoWidget({ loading, traficoRuta }: {
 // ─── Componente ClimaWidget ───────────────────────────────────────────────────
 type PuntoClima = {
   lat: number; lon: number; nombre: string;
-  temp: number; lluvia: number; viento: number;
+  temp: number; sensacion?: number; lluvia: number; viento: number;
   condicion: string; emoji: string;
   factorImpacto: number; impactoPct: number;
 };
