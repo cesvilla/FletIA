@@ -32,6 +32,7 @@ export async function POST(request: Request) {
         porcentaje_carga: body.resultado.porcentajeCarga,
         descripcion_ia: body.resultado.descripcion,
         flete_cobrado: body.flete_cobrado || null,
+        peajes_total: body.peajes_total || 0,
       })
       .select('*, camiones(patente, marca, modelo)')
       .single();

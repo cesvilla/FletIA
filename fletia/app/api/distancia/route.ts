@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { calcularPeajesEnRuta } from '@/lib/peajes-ar';
 
 // ─── Coordenadas exactas de capitales y ciudades principales de Argentina ───────
 // Nominatim a veces devuelve la provincia en lugar de la capital, lo que genera
@@ -184,12 +185,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No se encontró ruta entre esos puntos.' }, { status: 422 });
     }
 
+    const peajes = calcularPeajesEnRuta(resultado.polyline);
     return NextResponse.json({
       km: resultado.km,
       polyline: resultado.polyline,
       origen: { lat: coordOrigen.lat, lon: coordOrigen.lon, nombre: coordOrigen.nombre },
       destino: { lat: coordDestino.lat, lon: coordDestino.lon, nombre: coordDestino.nombre },
       motor: orsKey ? 'ors-hgv' : 'osrm',
+      peajes,
     });
 
   } catch {

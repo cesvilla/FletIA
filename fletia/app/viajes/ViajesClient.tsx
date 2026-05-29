@@ -71,6 +71,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     origen: { lat: number; lon: number; nombre: string };
     destino: { lat: number; lon: number; nombre: string };
     km: number;
+    peajes?: { plazas: Array<{ nombre: string; ruta: string; precio: number }>; total: number };
   } | null>(null);
   const [resultado, setResultado] = useState<ResultadoIA | null>(null);
   const [camionInfo, setCamionInfo] = useState<{ patente: string; marca: string; modelo: string } | null>(null);
@@ -113,6 +114,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     detalle_carga: '',
     precio_combustible: '1200',
     flete_cobrado: '',
+    peajes_total: '',
   });
 
   const iniciales = empresa.split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase() || 'TE';
@@ -139,8 +141,8 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al calcular distancia');
-      setForm(p => ({ ...p, kilometros: String(data.km) }));
-      setMapaData({ polyline: data.polyline, origen: data.origen, destino: data.destino, km: data.km });
+      setForm(p => ({ ...p, kilometros: String(data.km), peajes_total: data.peajes?.total ? String(data.peajes.total) : '' }));
+      setMapaData({ polyline: data.polyline, origen: data.origen, destino: data.destino, km: data.km, peajes: data.peajes });
       // Scroll a la columna derecha para mostrar clima y tráfico
       setTimeout(() => {
         rightColumnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -358,7 +360,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
       const res = await fetch('/api/viajes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, resultado, kilometros: parseFloat(form.kilometros), peso_carga: parseFloat(form.peso_carga), precio_combustible: parseFloat(form.precio_combustible), flete_cobrado: form.flete_cobrado ? parseFloat(form.flete_cobrado) : null }),
+        body: JSON.stringify({ ...form, resultado, kilometros: parseFloat(form.kilometros), peso_carga: parseFloat(form.peso_carga), precio_combustible: parseFloat(form.precio_combustible), flete_cobrado: form.flete_cobrado ? parseFloat(form.flete_cobrado) : null, peajes_total: form.peajes_total ? Math.round(parseFloat(form.peajes_total)) : 0 }),
       });
       const data = await res.json();
       if (data.error) { alert('Error al guardar: ' + data.error); return; }
@@ -381,13 +383,17 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     setConfirmado(false);
   }
 
+  // Peajes + costo total real
+  const peajesTotal = resultado && form.peajes_total ? (parseFloat(form.peajes_total) || 0) : 0;
+  const costoConPeajes = resultado ? resultado.costoTotal + peajesTotal : 0;
+
   // Calcular rentabilidad
   const margenNeto = resultado && form.flete_cobrado
-    ? (((parseFloat(form.flete_cobrado) - resultado.costoTotal) / parseFloat(form.flete_cobrado)) * 100).toFixed(1)
+    ? (((parseFloat(form.flete_cobrado) - costoConPeajes) / parseFloat(form.flete_cobrado)) * 100).toFixed(1)
     : null;
 
   const gananciaNeta = resultado && form.flete_cobrado
-    ? parseFloat(form.flete_cobrado) - resultado.costoTotal
+    ? parseFloat(form.flete_cobrado) - costoConPeajes
     : null;
 
   const colorMargen = margenNeto
@@ -937,6 +943,30 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       </div>
                     )}
 
+                    {/* Peajes detectados en ruta */}
+                    {mapaData?.peajes && mapaData.peajes.plazas.length > 0 && (
+                      <div style={{ border: '1px solid rgba(212,68,12,0.25)', backgroundColor: 'rgba(212,68,12,0.03)' }}>
+                        <div style={{ padding: '8px 14px', borderBottom: '1px solid rgba(212,68,12,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '2px', color: '#d4440c', textTransform: 'uppercase' }}>
+                            🚧 {mapaData.peajes.plazas.length} peaje{mapaData.peajes.plazas.length > 1 ? 's' : ''} detectado{mapaData.peajes.plazas.length > 1 ? 's' : ''} en la ruta
+                          </div>
+                          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '16px', fontWeight: 800, color: '#d4440c' }}>
+                            ${mapaData.peajes.total.toLocaleString('es-AR')}
+                          </div>
+                        </div>
+                        <div style={{ padding: '8px 14px' }}>
+                          {mapaData.peajes.plazas.map((p, i) => (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: i < mapaData.peajes!.plazas.length - 1 ? '1px solid rgba(212,68,12,0.08)' : 'none' }}>
+                              <span style={{ fontSize: '11px', color: '#5a3000' }}>• {p.nombre} <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>({p.ruta})</span></span>
+                              <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', color: '#d4440c', fontWeight: 700 }}>${p.precio.toLocaleString('es-AR')}</span>
+                            </div>
+                          ))}
+                          <div style={{ marginTop: '6px', fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>
+                            Precios aprox. categoría 5 (semirremolque). Ajustá en el campo "Peajes" si conocés el valor real.
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Km y Peso */}
                     <div className="grid grid-cols-2 gap-3">
@@ -986,6 +1016,28 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         className="w-full px-3 py-2.5 text-sm outline-none"
                         style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
                       />
+                    </div>
+
+                    {/* Peajes */}
+                    <div>
+                      <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>
+                        Peajes ($) <span style={{ color: '#8a8278' }}>opcional</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={form.peajes_total}
+                        onChange={e => setForm(p => ({ ...p, peajes_total: e.target.value }))}
+                        placeholder="ej: 5800"
+                        min={0}
+                        step={100}
+                        className="w-full px-3 py-2.5 text-sm outline-none"
+                        style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
+                      />
+                      <div className="mt-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>
+                        {mapaData?.peajes?.plazas?.length
+                          ? `✓ ${mapaData.peajes.plazas.length} plaza${mapaData.peajes.plazas.length > 1 ? 's' : ''} auto-detectada${mapaData.peajes.plazas.length > 1 ? 's' : ''} — podés ajustar`
+                          : 'Ingresá el costo total de peajes del recorrido'}
+                      </div>
                     </div>
 
                     {/* Precio combustible y flete */}
@@ -1072,6 +1124,22 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                           </div>
                         ))}
                       </div>
+                      {peajesTotal > 0 && (
+                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>🚧 + Peajes</div>
+                            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '22px', fontWeight: 700, color: '#ffa726' }}>
+                              +${peajesTotal.toLocaleString('es-AR')}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>Total estimado</div>
+                            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '28px', fontWeight: 900, color: '#fff' }}>
+                              ${costoConPeajes.toLocaleString('es-AR')}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Confirmar / Cancelar */}
@@ -1120,7 +1188,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '6px' }}>Rentabilidad del flete</div>
                         <div className="flex items-center justify-between">
                           <div className="text-sm" style={{ color: '#4a4540' }}>
-                            Flete: ${parseFloat(form.flete_cobrado).toLocaleString('es-AR')} · Combustible: ${resultado.costoTotal.toLocaleString('es-AR')}
+                            Flete: ${parseFloat(form.flete_cobrado).toLocaleString('es-AR')} · Costo: ${costoConPeajes.toLocaleString('es-AR')}{peajesTotal > 0 ? ' (comb.+peajes)' : ''}
                           </div>
                           <div style={{ textAlign: 'right' }}>
                             <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '1px', color: colorMargen, textTransform: 'uppercase', marginBottom: '2px' }}>{gananciaNeta! >= 0 ? 'Ganancia' : 'Pérdida'}</div>
@@ -1164,6 +1232,12 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                             pct: Math.min((resultado.consumoReal / 60) * 100, 100),
                             desc: `vs. ${camionSeleccionado?.consumo_base_litros ?? '?'} lts/100km en vacío`,
                           },
+                          ...(peajesTotal > 0 ? [{
+                            label: 'Peajes en ruta',
+                            val: `$${peajesTotal.toLocaleString('es-AR')}`,
+                            pct: Math.min((peajesTotal / costoConPeajes) * 100, 100),
+                            desc: `Total comb. + peajes: $${costoConPeajes.toLocaleString('es-AR')}`,
+                          }] : []),
                         ].map(f => (
                           <div key={f.label}>
                             <div className="flex justify-between mb-0.5">
