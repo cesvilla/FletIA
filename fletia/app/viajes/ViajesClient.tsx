@@ -111,8 +111,6 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     kilometros: '',
     peso_carga: '',
     detalle_carga: '',
-    tipo_ruta: 'mixta',
-    terreno: 'plano',
     precio_combustible: '1200',
     flete_cobrado: '',
   });
@@ -990,36 +988,6 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       />
                     </div>
 
-                    {/* Tipo ruta y terreno */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>Tipo de ruta</label>
-                        <select
-                          value={form.tipo_ruta}
-                          onChange={e => setForm(p => ({ ...p, tipo_ruta: e.target.value }))}
-                          className="w-full px-3 py-2.5 text-sm font-medium outline-none"
-                          style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
-                        >
-                          <option value="autopista">🛣️ Autopista</option>
-                          <option value="mixta">🔀 Mixta</option>
-                          <option value="urbana">🏙️ Urbana</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>Terreno</label>
-                        <select
-                          value={form.terreno}
-                          onChange={e => setForm(p => ({ ...p, terreno: e.target.value }))}
-                          className="w-full px-3 py-2.5 text-sm font-medium outline-none"
-                          style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
-                        >
-                          <option value="plano">➡️ Plano</option>
-                          <option value="ondulado">〰️ Ondulado</option>
-                          <option value="montanoso">⛰️ Montañoso</option>
-                        </select>
-                      </div>
-                    </div>
-
                     {/* Precio combustible y flete */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -1158,23 +1126,39 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       <p className="text-sm" style={{ color: '#4a4540', lineHeight: '1.6' }}>{resultado.descripcion}</p>
                     </div>
 
-                    {/* Factores aplicados */}
+                    {/* Desglose del cálculo */}
                     <div className="p-4 bg-white border border-gray-200">
-                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '12px' }}>Factores aplicados</div>
+                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '12px' }}>Desglose del cálculo</div>
                       <div className="space-y-2">
                         {[
-                          { label: 'Factor peso de carga', val: `×${resultado.factorPeso}`, pct: resultado.porcentajeCarga },
-                          { label: 'Factor tipo de ruta', val: `×${resultado.factorRuta}`, pct: (resultado.factorRuta - 1) * 100 },
-                          { label: 'Factor terreno', val: `×${resultado.factorTerreno}`, pct: (resultado.factorTerreno - 1) * 100 },
+                          {
+                            label: 'Carga sobre capacidad máxima',
+                            val: `${resultado.porcentajeCarga}%`,
+                            pct: resultado.porcentajeCarga,
+                            desc: `${form.peso_carga} ton de ${camionSeleccionado?.capacidad_max_ton ?? '?'} ton máx`,
+                          },
+                          {
+                            label: 'Incremento por peso de carga',
+                            val: `+${Math.round((resultado.factorPeso - 1) * 100)}%`,
+                            pct: Math.round((resultado.factorPeso - 1) * 100),
+                            desc: `Consumo base × ${resultado.factorPeso}`,
+                          },
+                          {
+                            label: 'Consumo estimado con carga',
+                            val: `${resultado.consumoReal} lts/100km`,
+                            pct: Math.min((resultado.consumoReal / 60) * 100, 100),
+                            desc: `vs. ${camionSeleccionado?.consumo_base_litros ?? '?'} lts/100km en vacío`,
+                          },
                         ].map(f => (
                           <div key={f.label}>
-                            <div className="flex justify-between mb-1">
+                            <div className="flex justify-between mb-0.5">
                               <span className="text-xs" style={{ color: '#4a4540' }}>{f.label}</span>
                               <span className="text-xs font-bold" style={{ fontFamily: 'DM Mono, monospace', color: '#d4440c' }}>{f.val}</span>
                             </div>
-                            <div style={{ height: '4px', backgroundColor: '#e8e3db', borderRadius: '2px', overflow: 'hidden' }}>
+                            <div style={{ height: '3px', backgroundColor: '#e8e3db', borderRadius: '2px', overflow: 'hidden', marginBottom: '2px' }}>
                               <div style={{ height: '100%', width: `${Math.min(f.pct, 100)}%`, backgroundColor: '#d4440c', borderRadius: '2px' }}></div>
                             </div>
+                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>{f.desc}</div>
                           </div>
                         ))}
                       </div>

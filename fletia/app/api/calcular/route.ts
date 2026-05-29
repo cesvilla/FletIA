@@ -33,10 +33,7 @@ export async function POST(request: Request) {
       capacidadMax: camion.capacidad_max_ton,
       pesoCarga: body.peso_carga,
       kilometros: body.kilometros,
-      tipoRuta: body.tipo_ruta || 'mixta',
-      terreno: body.terreno || 'plano',
       precioCombustible: body.precio_combustible,
-      condicionCamion: camion.condicion,
     });
 
     return NextResponse.json({

@@ -30,9 +30,6 @@ export async function POST(request: Request) {
       litros_reales,
       viaje.kilometros,
       viaje.factor_peso,
-      viaje.factor_ruta,
-      viaje.factor_terreno,
-      viaje.factor_condicion || 1.0
     );
 
     const consumoRealMedido = (litros_reales / viaje.kilometros) * 100;

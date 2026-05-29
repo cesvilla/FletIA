@@ -3,18 +3,14 @@ export interface ParametrosViaje {
   capacidadMax: number;
   pesoCarga: number;
   kilometros: number;
-  tipoRuta: 'autopista' | 'mixta' | 'urbana';
-  terreno: 'plano' | 'ondulado' | 'montanoso';
   precioCombustible: number;
-  condicionCamion: 'excelente' | 'buena' | 'regular';
-  factorClima?: number; // 0 = sin impacto, 0.10 = +10%
 }
 
 export interface ResultadoCalculo {
   factorPeso: number;
-  factorRuta: number;
-  factorTerreno: number;
-  factorCondicion: number;
+  factorRuta: number;      // siempre 1 — reservado para compat. DB
+  factorTerreno: number;   // siempre 1 — reservado para compat. DB
+  factorCondicion: number; // siempre 1 — reservado para compat. DB
   consumoReal: number;
   litrosTotales: number;
   costoTotal: number;
@@ -23,77 +19,52 @@ export interface ResultadoCalculo {
   descripcion: string;
 }
 
-// ─── Incrementos individuales sobre consumo base ──────────────────────────────
-// Cada factor agrega un porcentaje independiente al consumo base.
-// Se suman (NO se multiplican) para evitar que se potencien entre sí.
+// ─── Lógica de cálculo ────────────────────────────────────────────────────────
 //
-// Referencia real para camiones diesel argentinos:
-//   Carga llena (+25%), autopista base, mixta (+12%), urbana (+28%)
-//   Terreno ondulado (+7%), montañoso (+18%)
-//   Condición buena (+3%), regular (+8%)
-
-const INCREMENTOS_RUTA: Record<string, number> = {
-  autopista: 0.00,   // base, sin incremento
-  mixta:     0.12,   // +12% sobre base
-  urbana:    0.28,   // +28% sobre base
-};
-
-const INCREMENTOS_TERRENO: Record<string, number> = {
-  plano:      0.00,  // base
-  ondulado:   0.07,  // +7%
-  montanoso:  0.18,  // +18%
-};
-
-const INCREMENTOS_CONDICION: Record<string, number> = {
-  excelente: 0.00,   // base
-  buena:     0.03,   // +3%
-  regular:   0.08,   // +8%
-};
+// Se calcula únicamente con datos reales:
+//   - consumoBase: aprendido de los viajes reales confirmados del camión
+//   - pesoCarga:   toneladas que el usuario ingresa
+//   - capacidadMax: capacidad del camión registrada
+//
+// El incremento por peso es el único factor variable porque es el único
+// que el usuario informa con datos reales en cada viaje.
+// La relación peso/consumo en camiones diesel es física y directa:
+//   carga llena ≈ +25% consumo sobre vacío (promedio real para semirremolques).
+//
+// Los factores de ruta, terreno, clima y condición del camión fueron eliminados
+// porque se basaban en porcentajes genéricos, no en datos de la flota real.
+// El consumo base aprendido ya captura esas condiciones de forma implícita.
 
 export function calcularViaje(params: ParametrosViaje): ResultadoCalculo {
-  const {
-    consumoBase, capacidadMax, pesoCarga, kilometros,
-    tipoRuta, terreno, precioCombustible, condicionCamion,
-    factorClima = 0,
-  } = params;
+  const { consumoBase, capacidadMax, pesoCarga, kilometros, precioCombustible } = params;
 
   const porcentajeCarga = Math.min(pesoCarga / capacidadMax, 1);
 
-  // Incrementos individuales (cada uno es independiente)
-  const incPeso      = porcentajeCarga * 0.25;
-  const incRuta      = INCREMENTOS_RUTA[tipoRuta]      ?? 0;
-  const incTerreno   = INCREMENTOS_TERRENO[terreno]    ?? 0;
-  const incCondicion = INCREMENTOS_CONDICION[condicionCamion] ?? 0;
-  const incClima     = factorClima; // viene de la API de clima (0 a 0.25)
+  // Único incremento: peso de la carga (dato real ingresado por el usuario)
+  const incPeso   = porcentajeCarga * 0.25;
+  const factorTotal = 1 + incPeso;
 
-  // Factor total = suma de incrementos (aditivo, no multiplicativo)
-  const factorTotal = 1 + incPeso + incRuta + incTerreno + incCondicion + incClima;
-
-  // Factores individuales para mostrar en UI y guardar en DB
-  const factorPeso      = Math.round((1 + incPeso) * 100) / 100;
-  const factorRuta      = 1 + incRuta;
-  const factorTerreno   = 1 + incTerreno;
-  const factorCondicion = 1 + incCondicion;
+  const factorPeso = Math.round(factorTotal * 100) / 100;
 
   const consumoReal   = consumoBase * factorTotal;
   const litrosTotales = (consumoReal * kilometros) / 100;
   const costoTotal    = litrosTotales * precioCombustible;
   const costoPorKm    = costoTotal / kilometros;
 
-  const pctCarga = Math.round(porcentajeCarga * 100);
-  const pctAumento = Math.round((factorTotal - 1) * 100);
+  const pctCarga   = Math.round(porcentajeCarga * 100);
+  const pctAumento = Math.round(incPeso * 100);
 
-  const climaDesc = incClima > 0 ? ` Las condiciones climáticas agregan un ${Math.round(incClima * 100)}% adicional.` : '';
   const descripcion =
-    `Con ${pesoCarga} ton de carga (${pctCarga}% de capacidad) en ruta ${tipoRuta}, ` +
-    `el consumo aumenta un ${pctAumento}% respecto al viaje vacío.${climaDesc} ` +
-    `Consumo estimado: ${consumoReal.toFixed(1)} lts/100km · Total: ${litrosTotales.toFixed(1)} litros.`;
+    `Con ${pesoCarga} ton de carga (${pctCarga}% de capacidad), el consumo estimado es ` +
+    `${consumoReal.toFixed(1)} lts/100km — un ${pctAumento}% más que en vacío. ` +
+    `Total: ${litrosTotales.toFixed(1)} litros a $${precioCombustible}/lt. ` +
+    `El consumo base del camión fue aprendido de sus viajes reales confirmados.`;
 
   return {
     factorPeso,
-    factorRuta,
-    factorTerreno,
-    factorCondicion,
+    factorRuta:      1,
+    factorTerreno:   1,
+    factorCondicion: 1,
     consumoReal:   Math.round(consumoReal * 10) / 10,
     litrosTotales: Math.round(litrosTotales * 10) / 10,
     costoTotal:    Math.round(costoTotal),
@@ -108,20 +79,13 @@ export function calcularNuevoConsumoBase(
   litrosReales: number,
   kilometros: number,
   factorPeso: number,
-  factorRuta: number,
-  factorTerreno: number,
-  factorCondicion: number
 ): number {
   const consumoRealMedido = (litrosReales / kilometros) * 100;
 
-  // Reconstruir factor total usando la misma lógica aditiva
-  const incPeso      = factorPeso - 1;
-  const incRuta      = factorRuta - 1;
-  const incTerreno   = factorTerreno - 1;
-  const incCondicion = factorCondicion - 1;
-  const factorTotal  = 1 + incPeso + incRuta + incTerreno + incCondicion;
+  // Con el factor aditivo simplificado: factorTotal = factorPeso
+  const consumoBaseImplicito = consumoRealMedido / factorPeso;
 
-  const consumoBaseImplicito = consumoRealMedido / factorTotal;
+  // Media ponderada: 70% historial acumulado + 30% medición nueva
   const nuevoConsumoBase = (consumoBaseActual * 0.7) + (consumoBaseImplicito * 0.3);
   return Math.round(Math.min(Math.max(nuevoConsumoBase, 15), 60) * 10) / 10;
 }
