@@ -140,7 +140,7 @@ export default function RentabilidadClient({ viajes, empresa, email }: Props) {
 
               {/* Tabla de viajes */}
               <div className="bg-white border border-gray-200">
-                <div className="px-6 py-4" style={{ borderBottom: '1px solid rgba(26,23,20,0.1)' }}>
+                <div className="px-4 py-3 md:px-6 md:py-4" style={{ borderBottom: '1px solid rgba(26,23,20,0.1)' }}>
                   <div className="text-sm font-bold">Detalle por viaje</div>
                 </div>
                 <div>
@@ -149,7 +149,7 @@ export default function RentabilidadClient({ viajes, empresa, email }: Props) {
                     const margen = ((ganancia / v.flete_cobrado) * 100).toFixed(1);
                     const rentable = ganancia >= 0;
                     return (
-                      <div key={v.id} className="flex items-center gap-4 px-6 py-4" style={{ borderBottom: i < viajes.length - 1 ? '1px solid rgba(26,23,20,0.08)' : 'none' }}>
+                      <div key={v.id} className="flex items-center gap-2 md:gap-4 px-4 py-3 md:px-6 md:py-4" style={{ borderBottom: i < viajes.length - 1 ? '1px solid rgba(26,23,20,0.08)' : 'none' }}>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-semibold">
                             {v.origen && v.destino ? `${v.origen} → ${v.destino}` : `${v.kilometros} km`}

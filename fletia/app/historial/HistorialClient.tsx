@@ -652,7 +652,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                 </div>
               ) : (
                 <div className="bg-white border border-gray-200">
-                  <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                  <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-200 flex items-center justify-between">
                     <div>
                       <div className="text-sm font-bold">
                         📋 {mesSeleccionado ? formatMes(mesSeleccionado) : 'Todos los viajes'} ({viajesFiltrados.length})
@@ -675,7 +675,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                       <div key={v.id} className="border-b last:border-b-0 border-gray-100">
                         <div
                           onClick={() => toggleExpandido(v.id)}
-                          className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors cursor-pointer select-none"
+                          className="flex items-center gap-2 md:gap-4 px-4 py-3 md:px-6 md:py-4 hover:bg-gray-50 transition-colors cursor-pointer select-none"
                         >
                           <div style={{ color: '#9ca3af', fontSize: '10px', flexShrink: 0, transition: 'transform 0.2s', transform: abierto ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</div>
                           <div className="flex-1 min-w-0">
@@ -690,10 +690,10 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                               {new Date(v.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                             </div>
                           </div>
-                          <div className="text-right flex-shrink-0 flex items-center gap-3">
+                          <div className="text-right flex-shrink-0 flex items-center gap-2 md:gap-3">
                             <div>
-                              <div className="text-lg font-bold">${v.costo_total.toLocaleString('es-AR')}</div>
-                              <div className="font-mono text-[9px] text-gray-400">${v.costo_por_km}/km</div>
+                              <div className="text-base md:text-lg font-bold">${v.costo_total.toLocaleString('es-AR')}</div>
+                              <div className="hidden sm:block font-mono text-[9px] text-gray-400">${v.costo_por_km}/km</div>
                             </div>
                             <button
                               onClick={(e) => abrirEdicion(e, v)}
@@ -706,7 +706,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                         {abierto && (
                           <div className="border-t border-gray-100" style={{ backgroundColor: '#fafafa' }}>
                             {editando !== v.id && (
-                              <div className="px-6 py-5">
+                              <div className="px-4 py-4 md:px-6 md:py-5">
                                 <div className="font-mono text-[9px] text-gray-400 uppercase tracking-widest mb-4">// Detalle del viaje</div>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                                   {[

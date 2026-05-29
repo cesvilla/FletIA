@@ -836,7 +836,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
               <div>
                 <form onSubmit={handleCalcular} className="bg-white border border-gray-200">
 
-                  <div className="px-6 py-4" style={{ borderBottom: '1px solid rgba(26,23,20,0.1)' }}>
+                  <div className="px-4 py-3 md:px-6 md:py-4" style={{ borderBottom: '1px solid rgba(26,23,20,0.1)' }}>
                     <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '2px', color: '#d4440c', textTransform: 'uppercase', marginBottom: '2px' }}>⚡ Motor IA</div>
                     <div className="text-base font-bold">Calculá tu próximo viaje</div>
                   </div>
@@ -1190,15 +1190,15 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
 
          {viajes.length > 0 && (
             <div className="mt-6 bg-white border border-gray-200">
-              <div className="px-6 py-4" style={{ borderBottom: '1px solid rgba(26,23,20,0.1)' }}>
+              <div className="px-4 py-3 md:px-6 md:py-4" style={{ borderBottom: '1px solid rgba(26,23,20,0.1)' }}>
                 <div className="text-sm font-bold">📋 Últimos viajes calculados</div>
               </div>
               <div>
                 {viajes.map((v, i) => (
                   <div key={v.id} className="border-b last:border-b-0" style={{ borderColor: 'rgba(26,23,20,0.08)' }}>
-                    <div className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center gap-2 md:gap-4 px-4 py-3 md:px-6 md:py-4 hover:bg-gray-50 transition-colors">
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold">
+                        <div className="text-sm font-semibold truncate">
                           {v.origen && v.destino ? `${v.origen} → ${v.destino}` : `${v.kilometros} km`}
                         </div>
                         <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', marginTop: '2px' }}>
@@ -1210,7 +1210,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '18px', fontWeight: 700 }}>
                           ${v.costo_total.toLocaleString('es-AR')}
                         </div>
-                        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>
+                        <div className="hidden sm:block" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>
                           ${v.costo_por_km}/km
                         </div>
                       </div>
