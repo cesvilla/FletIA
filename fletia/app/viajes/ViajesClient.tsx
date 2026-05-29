@@ -135,14 +135,21 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     setErrorKm(null);
     setMapaData(null);
     setLoadingKm(true);
+    const ctrl = new AbortController();
+    const timeoutId = setTimeout(() => ctrl.abort(), 35000);
     try {
       const res = await fetch('/api/distancia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ origen: form.origen, destino: form.destino }),
+        signal: ctrl.signal,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al calcular distancia');
+      // La respuesta puede no ser JSON (p. ej. timeout de gateway): lo manejamos.
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = typeof data?.error === 'string' ? data.error : 'No se pudo calcular la distancia. Probá de nuevo.';
+        throw new Error(msg);
+      }
       setForm(p => ({ ...p, kilometros: String(data.km), peajes_total: data.peajes?.total ? String(data.peajes.total) : '' }));
       setMapaData({ polyline: data.polyline, origen: data.origen, destino: data.destino, km: data.km, peajes: data.peajes });
       // Scroll a la columna derecha para mostrar clima y tráfico
@@ -163,6 +170,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
           origenCoord: data.origen,
           destinoCoord: data.destino,
         }),
+        signal: AbortSignal.timeout(30000),
       })
         .then(r => r.json())
         .then(c => { if (c.puntos) setClimaRuta(c); })
@@ -172,14 +180,19 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ polyline: data.polyline, km: data.km }),
+        signal: AbortSignal.timeout(30000),
       })
         .then(r => r.json())
         .then(t => { if (t.segmentos) setTraficoRuta(t); })
         .catch(() => {})
         .finally(() => setLoadingTrafico(false));
     } catch (err: any) {
-      setErrorKm(err.message);
+      const msg = err?.name === 'AbortError'
+        ? 'El cálculo tardó demasiado. Revisá tu conexión y probá de nuevo.'
+        : (typeof err?.message === 'string' && err.message ? err.message : 'No se pudo calcular la distancia.');
+      setErrorKm(msg);
     } finally {
+      clearTimeout(timeoutId);
       setLoadingKm(false);
     }
   }
@@ -228,6 +241,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
             origenCoord: mapaData.origen,
             destinoCoord: mapaData.destino,
           }),
+          signal: AbortSignal.timeout(30000),
         })
           .then(r => r.json())
           .then(c => { if (c.puntos) setClimaRuta(c); })
@@ -237,6 +251,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ polyline: mapaData.polyline, km: mapaData.km }),
+          signal: AbortSignal.timeout(30000),
         })
           .then(r => r.json())
           .then(t => { if (t.segmentos) setTraficoRuta(t); })

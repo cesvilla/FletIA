@@ -1,6 +1,27 @@
 import { NextResponse } from 'next/server';
 import { calcularPeajesEnRuta } from '@/lib/peajes-ar';
 
+// Permitir hasta 30s en Vercel (rutas largas con ORS/OSRM pueden tardar)
+export const maxDuration = 30;
+
+// fetch con timeout: si el servicio externo no responde, abortamos y seguimos
+// con el fallback en vez de colgar toda la petición.
+async function fetchConTimeout(
+  url: string,
+  opts: RequestInit = {},
+  ms = 9000
+): Promise<Response | null> {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 // ─── Coordenadas exactas de capitales y ciudades principales de Argentina ───────
 // Nominatim a veces devuelve la provincia en lugar de la capital, lo que genera
 // rutas erróneas. Este diccionario garantiza las coordenadas correctas.
@@ -66,8 +87,8 @@ async function geocodificar(lugar: string): Promise<{ lat: number; lon: number; 
 
   // 2. Fallback a Nominatim para localidades no cubiertas
   const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(lugar + ', Argentina')}&format=json&limit=5&addressdetails=1&countrycodes=ar`;
-  const res = await fetch(url, { headers: { 'User-Agent': 'FletIA/1.0 (fletia@gmail.com)' } });
-  if (!res.ok) return null;
+  const res = await fetchConTimeout(url, { headers: { 'User-Agent': 'FletIA/1.0 (fletia@gmail.com)' } }, 7000);
+  if (!res || !res.ok) return null;
   const data = await res.json();
   if (!data.length) return null;
 
@@ -83,6 +104,16 @@ async function geocodificar(lugar: string): Promise<{ lat: number; lon: number; 
     lon: parseFloat(elegido.lon),
     nombre: elegido.display_name.split(',').slice(0, 2).join(',').trim(),
   };
+}
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function decodificarPolyline(encoded: string): [number, number][] {
@@ -106,7 +137,7 @@ async function calcularRutaORS(
   destino: { lat: number; lon: number },
   apiKey: string
 ): Promise<{ km: number; polyline: [number, number][] } | null> {
-  const res = await fetch('https://api.openrouteservice.org/v2/directions/driving-hgv/geojson', {
+  const res = await fetchConTimeout('https://api.openrouteservice.org/v2/directions/driving-hgv/geojson', {
     method: 'POST',
     headers: {
       'Authorization': apiKey,
@@ -118,8 +149,8 @@ async function calcularRutaORS(
         [destino.lon, destino.lat],
       ],
     }),
-  });
-  if (!res.ok) return null;
+  }, 12000);
+  if (!res || !res.ok) return null;
   const data = await res.json();
   const feature = data.features?.[0];
   if (!feature) return null;
@@ -141,8 +172,8 @@ async function calcularRutaOSRM(
   destino: { lat: number; lon: number }
 ): Promise<{ km: number; polyline: [number, number][] } | null> {
   const url = `https://router.project-osrm.org/route/v1/driving/${origen.lon},${origen.lat};${destino.lon},${destino.lat}?overview=full&geometries=polyline`;
-  const res = await fetch(url, { headers: { 'User-Agent': 'FletIA/1.0 (fletia@gmail.com)' } });
-  if (!res.ok) return null;
+  const res = await fetchConTimeout(url, { headers: { 'User-Agent': 'FletIA/1.0 (fletia@gmail.com)' } }, 12000);
+  if (!res || !res.ok) return null;
   const data = await res.json();
   if (data.code !== 'Ok' || !data.routes?.length) return null;
   const km = Math.round(data.routes[0].distance / 1000);
@@ -171,6 +202,7 @@ export async function POST(request: Request) {
 
     const orsKey = process.env.ORS_API_KEY;
     let resultado: { km: number; polyline: [number, number][] } | null = null;
+    let motor = orsKey ? 'ors-hgv' : 'osrm';
 
     if (orsKey) {
       resultado = await calcularRutaORS(coordOrigen, coordDestino, orsKey);
@@ -179,10 +211,22 @@ export async function POST(request: Request) {
     // Fallback a OSRM si no hay key o si ORS falla
     if (!resultado) {
       resultado = await calcularRutaOSRM(coordOrigen, coordDestino);
+      if (resultado) motor = 'osrm';
     }
 
+    // Último recurso: estimación por línea recta × factor de ruta (1.25).
+    // Garantiza un resultado funcional aunque los servicios de ruteo no respondan.
     if (!resultado) {
-      return NextResponse.json({ error: 'No se encontró ruta entre esos puntos.' }, { status: 422 });
+      const kmRecta = haversineKm(coordOrigen.lat, coordOrigen.lon, coordDestino.lat, coordDestino.lon);
+      const km = Math.round(kmRecta * 1.25);
+      resultado = {
+        km,
+        polyline: [
+          [coordOrigen.lat, coordOrigen.lon],
+          [coordDestino.lat, coordDestino.lon],
+        ],
+      };
+      motor = 'estimado';
     }
 
     const peajes = calcularPeajesEnRuta(resultado.polyline);
@@ -191,7 +235,7 @@ export async function POST(request: Request) {
       polyline: resultado.polyline,
       origen: { lat: coordOrigen.lat, lon: coordOrigen.lon, nombre: coordOrigen.nombre },
       destino: { lat: coordDestino.lat, lon: coordDestino.lon, nombre: coordDestino.nombre },
-      motor: orsKey ? 'ors-hgv' : 'osrm',
+      motor,
       peajes,
     });
 

@@ -2,6 +2,22 @@ import { NextResponse } from 'next/server';
 
 const TOMTOM_KEY = process.env.TOMTOM_API_KEY;
 
+// Permitir hasta 30s en Vercel (varias consultas a TomTom + geocodificación)
+export const maxDuration = 30;
+
+// fetch con timeout: evita que una consulta lenta cuelgue toda la respuesta
+async function fetchConTimeout(url: string, opts: RequestInit = {}, ms = 8000): Promise<Response | null> {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 type NivelTrafico = 'fluido' | 'moderado' | 'lento' | 'congestionado';
 
 interface SegmentoTrafico {
@@ -67,10 +83,10 @@ function muestrarPuntos(polyline: [number, number][], n: number): [number, numbe
 async function reversGeocode(lat: number, lon: number): Promise<string> {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=8&addressdetails=1`;
-    const res = await fetch(url, {
+    const res = await fetchConTimeout(url, {
       headers: { 'User-Agent': 'FletIA/1.0 (fletia@gmail.com)' },
-    });
-    if (!res.ok) return 'En ruta';
+    }, 6000);
+    if (!res || !res.ok) return 'En ruta';
     const data = await res.json();
     const addr = data.address;
     const ciudad = addr?.city || addr?.town || addr?.county || addr?.state_district;
@@ -90,8 +106,8 @@ async function consultarFlow(lat: number, lon: number, apiKey: string): Promise<
 } | null> {
   try {
     const url = `https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point=${lat},${lon}&unit=KMPH&key=${apiKey}`;
-    const res = await fetch(url, { next: { revalidate: 180 } }); // cache 3 min
-    if (!res.ok) return null;
+    const res = await fetchConTimeout(url, { next: { revalidate: 180 } }, 8000); // cache 3 min
+    if (!res || !res.ok) return null;
     const data = await res.json();
     const flow = data.flowSegmentData;
     if (!flow) return null;
@@ -113,8 +129,8 @@ async function consultarIncidentes(lat: number, lon: number, apiKey: string): Pr
     const url = `https://api.tomtom.com/traffic/services/5/incidentDetails?bbox=${bbox}` +
       `&fields=${encodeURIComponent(fields)}&language=es-ES` +
       `&categoryFilter=0,1,2,3,4,5,6,7,8,9,10,11&timeValidityFilter=present&key=${apiKey}`;
-    const res = await fetch(url, { next: { revalidate: 180 } });
-    if (!res.ok) return [];
+    const res = await fetchConTimeout(url, { next: { revalidate: 180 } }, 8000);
+    if (!res || !res.ok) return [];
     const data = await res.json();
     const incidents = data.incidents ?? [];
 
