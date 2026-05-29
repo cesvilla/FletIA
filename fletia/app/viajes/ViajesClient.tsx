@@ -95,7 +95,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     resumenTipos: { tipo: string; emoji: string; cantidad: number }[];
     zonas: { zona: string; totalIncidentes: number; tipos: { tipo: string; emoji: string; cantidad: number }[] }[];
     cortes: { tipo: string; emoji: string; zona: string; ubicacion: string }[];
-    cortesUrbanos?: number;
+    incidentesUrbanos?: number;
   } | null>(null);
   const [loadingTrafico, setLoadingTrafico] = useState(false);
   const [climaDetalle, setClimaDetalle] = useState<{
@@ -1747,7 +1747,7 @@ type TraficoRutaData = {
   resumenTipos: ResumenTipo[];
   zonas: ZonaTrafico[];
   cortes: CorteRuta[];
-  cortesUrbanos?: number;
+  incidentesUrbanos?: number;
 };
 
 function TraficoWidget({ loading, traficoRuta }: {
@@ -1757,7 +1757,7 @@ function TraficoWidget({ loading, traficoRuta }: {
   const [verDesglose, setVerDesglose] = useState(false);
   const [verCortes, setVerCortes] = useState(false);
   const cortes = traficoRuta?.cortes ?? [];
-  const cortesUrbanos = traficoRuta?.cortesUrbanos ?? 0;
+  const incidentesUrbanos = traficoRuta?.incidentesUrbanos ?? 0;
   const tieneProblemas = (traficoRuta?.totalIncidentes ?? 0) > 0 ||
     traficoRuta?.segmentos.some(s => s.nivel === 'lento' || s.nivel === 'congestionado');
 
@@ -1806,7 +1806,7 @@ function TraficoWidget({ loading, traficoRuta }: {
         {traficoRuta && !loading && traficoRuta.disponible && (
           <>
             {/* ── Cortes de ruta — lo más importante, arriba de todo ── */}
-            {cortes.length > 0 ? (
+            {cortes.length > 0 && (
               <div style={{ marginBottom: 10, padding: '9px 12px', background: '#fdecec', border: '1.5px solid #d4440c', borderRadius: 8 }}>
                 <button
                   type="button"
@@ -1829,18 +1829,8 @@ function TraficoWidget({ loading, traficoRuta }: {
                         </span>
                       </div>
                     ))}
-                    {cortesUrbanos > 0 && (
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#8a6a55', lineHeight: 1.4, padding: '2px 2px' }}>
-                        + {cortesUrbanos} cierre{cortesUrbanos > 1 ? 's' : ''} en calles urbanas de ciudades del corredor (no afectan tu ruta principal).
-                      </div>
-                    )}
                   </div>
                 )}
-              </div>
-            ) : cortesUrbanos > 0 && (
-              <div style={{ marginBottom: 10, padding: '8px 12px', background: '#f1f8f1', border: '1px solid #c8e6c9', borderRadius: 8, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#2e7d32', lineHeight: 1.4 }}>
-                ✅ Sin cortes sobre rutas o autopistas de tu trayecto.
-                <span style={{ color: '#6b6560' }}> ({cortesUrbanos} cierre{cortesUrbanos > 1 ? 's' : ''} en calles urbanas del corredor, no afectan tu ruta principal.)</span>
               </div>
             )}
 
@@ -1911,7 +1901,7 @@ function TraficoWidget({ loading, traficoRuta }: {
             {traficoRuta.totalIncidentes > 0 ? (
               <div style={{ marginTop: 10, padding: '8px 12px', background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#856404', lineHeight: 1.5 }}>
                 <div style={{ marginBottom: 8 }}>
-                  ⚠️ <strong>{traficoRuta.totalIncidentes} incidente{traficoRuta.totalIncidentes > 1 ? 's' : ''}</strong> activo{traficoRuta.totalIncidentes > 1 ? 's' : ''} en la ruta
+                  ⚠️ <strong>{traficoRuta.totalIncidentes} incidente{traficoRuta.totalIncidentes > 1 ? 's' : ''}</strong> sobre tu ruta (rutas y autopistas)
                   {traficoRuta.demoraTotal > 0 && <> · demora real <strong>+{traficoRuta.demoraTotal} min</strong></>}.
                 </div>
 
@@ -1957,11 +1947,21 @@ function TraficoWidget({ loading, traficoRuta }: {
                     ))}
                   </div>
                 )}
+
+                {/* Nota: incidentes en calles urbanas del corredor (no afectan la ruta) */}
+                {incidentesUrbanos > 0 && (
+                  <div style={{ marginTop: 8, fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#8a7a4a', lineHeight: 1.4 }}>
+                    + {incidentesUrbanos} incidente{incidentesUrbanos > 1 ? 's' : ''} en calles urbanas de ciudades del corredor (no afectan tu ruta principal).
+                  </div>
+                )}
               </div>
             ) : (
               <div style={{ marginTop: 10, padding: '8px 12px', background: '#f1f8f1', border: '1px solid #c8e6c9', borderRadius: 6, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#2e7d32' }}>
-                ✅ Sin incidentes reportados en la ruta. Tráfico{' '}
+                ✅ Sin incidentes sobre rutas o autopistas de tu trayecto. Tráfico{' '}
                 {traficoRuta.segmentos.every(s => s.nivel === 'fluido') ? 'fluido en todos los tramos.' : 'con algunas demoras menores.'}
+                {incidentesUrbanos > 0 && (
+                  <span style={{ color: '#6b6560' }}> ({incidentesUrbanos} incidente{incidentesUrbanos > 1 ? 's' : ''} en calles urbanas del corredor, no afectan tu ruta.)</span>
+                )}
               </div>
             )}
 

@@ -252,7 +252,6 @@ export async function POST(request: Request) {
 
     // Deduplicar incidentes repetidos entre bboxes solapados
     const vistos = new Set<string>();
-    let totalIncidentes = 0;
     for (const seg of segmentos) {
       seg.incidentes = seg.incidentes.filter(inc => {
         const clave = `${inc.tipo}|${inc.descripcion}`;
@@ -260,26 +259,42 @@ export async function POST(request: Request) {
         vistos.add(clave);
         return true;
       });
-      seg.numIncidentes = seg.incidentes.length;
-      totalIncidentes += seg.incidentes.length;
     }
 
     // ── Agregación: por TIPO (global) y por ZONA (provincia/ruta) ───────────────
-    // No mostramos calles: agrupamos por tipo de incidente y por la zona/ruta
-    // (Ciudad, Provincia) por la que pasa el camión, con su conteo.
+    // Solo contamos incidentes sobre vías RELEVANTES para el camión (rutas,
+    // autopistas, accesos, etc.). Los incidentes en calles urbanas menores de las
+    // ciudades del corredor se cuentan aparte (incidentesUrbanos) para no alarmar
+    // al chofer con ruido que no afecta su ruta principal.
     const tiposGlobal = new Map<string, ResumenTipo>();
     const zonasMap = new Map<string, { zona: string; totalIncidentes: number; tipos: Map<string, ResumenTipo> }>();
     const cortesRaw: CorteRuta[] = [];
-    let cortesUrbanos = 0; // cierres en calles de ciudad (no sobre la ruta del camión)
+    let totalIncidentes = 0;     // incidentes sobre la ruta del camión
+    let incidentesUrbanos = 0;   // incidentes en calles urbanas del corredor
 
     for (const seg of segmentos) {
-      if (seg.incidentes.length === 0) continue;
+      let relevantesSeg = 0;
       const zonaNombre = seg.nombre || 'En ruta';
-      if (!zonasMap.has(zonaNombre)) {
-        zonasMap.set(zonaNombre, { zona: zonaNombre, totalIncidentes: 0, tipos: new Map() });
-      }
-      const zona = zonasMap.get(zonaNombre)!;
       for (const inc of seg.incidentes) {
+        // Ubicación concreta (sin el prefijo del tipo) para evaluar la relevancia
+        const ubic = inc.descripcion && inc.descripcion !== inc.tipo
+          ? inc.descripcion.replace(inc.tipo, '').replace(/^[\s—:]+/, '').trim()
+          : '';
+
+        // Incidente en calle urbana (no sobre ruta/autopista): se cuenta aparte
+        if (!VIA_RELEVANTE.test(ubic)) {
+          incidentesUrbanos++;
+          continue;
+        }
+
+        relevantesSeg++;
+        totalIncidentes++;
+
+        if (!zonasMap.has(zonaNombre)) {
+          zonasMap.set(zonaNombre, { zona: zonaNombre, totalIncidentes: 0, tipos: new Map() });
+        }
+        const zona = zonasMap.get(zonaNombre)!;
+
         const g = tiposGlobal.get(inc.tipo) ?? { tipo: inc.tipo, emoji: inc.emoji, cantidad: 0 };
         g.cantidad++;
         tiposGlobal.set(inc.tipo, g);
@@ -289,25 +304,17 @@ export async function POST(request: Request) {
         z.cantidad++;
         zona.tipos.set(inc.tipo, z);
 
-        // Cortes de ruta: solo los que están sobre vías relevantes para el camión
-        // (rutas/autopistas/accesos), con su ubicación concreta. Los cierres de
-        // calles urbanas menores se cuentan aparte para no alarmar al chofer.
+        // Cortes de ruta: guardamos la ubicación concreta para que el chofer sepa dónde
         if (TIPOS_CORTE.has(inc.tipo)) {
-          const ubic = inc.descripcion && inc.descripcion !== inc.tipo
-            ? inc.descripcion.replace(inc.tipo, '').replace(/^[\s—:]+/, '').trim()
-            : '';
-          if (VIA_RELEVANTE.test(ubic)) {
-            cortesRaw.push({
-              tipo: inc.tipo,
-              emoji: inc.emoji,
-              zona: zonaNombre,
-              ubicacion: ubic || zonaNombre,
-            });
-          } else {
-            cortesUrbanos++;
-          }
+          cortesRaw.push({
+            tipo: inc.tipo,
+            emoji: inc.emoji,
+            zona: zonaNombre,
+            ubicacion: ubic || zonaNombre,
+          });
         }
       }
+      seg.numIncidentes = relevantesSeg;
     }
 
     // Deduplicar cortes por ubicación (un mismo cierre puede caer en bboxes solapados)
@@ -342,7 +349,7 @@ export async function POST(request: Request) {
       resumenTipos,
       zonas,
       cortes,
-      cortesUrbanos,
+      incidentesUrbanos,
     });
 
   } catch (error: any) {
