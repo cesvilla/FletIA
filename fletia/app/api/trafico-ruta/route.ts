@@ -57,6 +57,12 @@ interface CorteRuta {
 // Tipos de incidente que son cortes/cierres de ruta (los importantes para el chofer)
 const TIPOS_CORTE = new Set(['Ruta cerrada', 'Carril cerrado']);
 
+// Solo nos importan los cortes sobre vías RELEVANTES para el camión:
+// rutas nacionales/provinciales, autopistas, autovías, accesos, circunvalaciones,
+// colectoras y caminos. Descarta el ruido de calles urbanas menores que caen
+// dentro del radio de búsqueda al pasar cerca de una ciudad.
+const VIA_RELEVANTE = /(\bruta\s|\brn\s?\d|\brp\s?\d|autopista|autov[ií]a|\bau\s?\d|\bacceso\b|circunvalaci[oó]n|colectora|camino\s)/i;
+
 interface Incidente {
   tipo: string;
   emoji: string;
@@ -99,8 +105,11 @@ async function reversGeocode(lat: number, lon: number): Promise<string> {
     if (!res || !res.ok) return 'En ruta';
     const data = await res.json();
     const addr = data.address;
-    const ciudad = addr?.city || addr?.town || addr?.county || addr?.state_district;
+    let ciudad = addr?.city || addr?.town || addr?.county || addr?.state_district;
     const provincia = addr?.state;
+    // Nominatim devuelve "Comuna N" en CABA (poco útil y engañoso al aplicarlo a
+    // toda la zona): lo descartamos y usamos solo la provincia.
+    if (ciudad && /^comuna\s/i.test(ciudad)) ciudad = null;
     if (ciudad && provincia && ciudad !== provincia) return `${ciudad}, ${provincia}`;
     return provincia || ciudad || 'En ruta';
   } catch {
@@ -260,7 +269,8 @@ export async function POST(request: Request) {
     // (Ciudad, Provincia) por la que pasa el camión, con su conteo.
     const tiposGlobal = new Map<string, ResumenTipo>();
     const zonasMap = new Map<string, { zona: string; totalIncidentes: number; tipos: Map<string, ResumenTipo> }>();
-    const cortes: CorteRuta[] = [];
+    const cortesRaw: CorteRuta[] = [];
+    let cortesUrbanos = 0; // cierres en calles de ciudad (no sobre la ruta del camión)
 
     for (const seg of segmentos) {
       if (seg.incidentes.length === 0) continue;
@@ -279,20 +289,35 @@ export async function POST(request: Request) {
         z.cantidad++;
         zona.tipos.set(inc.tipo, z);
 
-        // Cortes de ruta: SÍ guardamos la ubicación concreta para que el chofer sepa dónde
+        // Cortes de ruta: solo los que están sobre vías relevantes para el camión
+        // (rutas/autopistas/accesos), con su ubicación concreta. Los cierres de
+        // calles urbanas menores se cuentan aparte para no alarmar al chofer.
         if (TIPOS_CORTE.has(inc.tipo)) {
           const ubic = inc.descripcion && inc.descripcion !== inc.tipo
             ? inc.descripcion.replace(inc.tipo, '').replace(/^[\s—:]+/, '').trim()
             : '';
-          cortes.push({
-            tipo: inc.tipo,
-            emoji: inc.emoji,
-            zona: zonaNombre,
-            ubicacion: ubic || zonaNombre,
-          });
+          if (VIA_RELEVANTE.test(ubic)) {
+            cortesRaw.push({
+              tipo: inc.tipo,
+              emoji: inc.emoji,
+              zona: zonaNombre,
+              ubicacion: ubic || zonaNombre,
+            });
+          } else {
+            cortesUrbanos++;
+          }
         }
       }
     }
+
+    // Deduplicar cortes por ubicación (un mismo cierre puede caer en bboxes solapados)
+    const vistosCortes = new Set<string>();
+    const cortes: CorteRuta[] = cortesRaw.filter(c => {
+      const clave = c.ubicacion.toLowerCase();
+      if (vistosCortes.has(clave)) return false;
+      vistosCortes.add(clave);
+      return true;
+    });
 
     const resumenTipos: ResumenTipo[] = [...tiposGlobal.values()].sort((a, b) => b.cantidad - a.cantidad);
     const zonas: ZonaTrafico[] = [...zonasMap.values()]
@@ -317,6 +342,7 @@ export async function POST(request: Request) {
       resumenTipos,
       zonas,
       cortes,
+      cortesUrbanos,
     });
 
   } catch (error: any) {

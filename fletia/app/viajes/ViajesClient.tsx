@@ -95,6 +95,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     resumenTipos: { tipo: string; emoji: string; cantidad: number }[];
     zonas: { zona: string; totalIncidentes: number; tipos: { tipo: string; emoji: string; cantidad: number }[] }[];
     cortes: { tipo: string; emoji: string; zona: string; ubicacion: string }[];
+    cortesUrbanos?: number;
   } | null>(null);
   const [loadingTrafico, setLoadingTrafico] = useState(false);
   const [climaDetalle, setClimaDetalle] = useState<{
@@ -1746,6 +1747,7 @@ type TraficoRutaData = {
   resumenTipos: ResumenTipo[];
   zonas: ZonaTrafico[];
   cortes: CorteRuta[];
+  cortesUrbanos?: number;
 };
 
 function TraficoWidget({ loading, traficoRuta }: {
@@ -1755,6 +1757,7 @@ function TraficoWidget({ loading, traficoRuta }: {
   const [verDesglose, setVerDesglose] = useState(false);
   const [verCortes, setVerCortes] = useState(false);
   const cortes = traficoRuta?.cortes ?? [];
+  const cortesUrbanos = traficoRuta?.cortesUrbanos ?? 0;
   const tieneProblemas = (traficoRuta?.totalIncidentes ?? 0) > 0 ||
     traficoRuta?.segmentos.some(s => s.nivel === 'lento' || s.nivel === 'congestionado');
 
@@ -1803,14 +1806,14 @@ function TraficoWidget({ loading, traficoRuta }: {
         {traficoRuta && !loading && traficoRuta.disponible && (
           <>
             {/* ── Cortes de ruta — lo más importante, arriba de todo ── */}
-            {cortes.length > 0 && (
+            {cortes.length > 0 ? (
               <div style={{ marginBottom: 10, padding: '9px 12px', background: '#fdecec', border: '1.5px solid #d4440c', borderRadius: 8 }}>
                 <button
                   type="button"
                   onClick={() => setVerCortes(v => !v)}
                   style={{ width: '100%', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 700, color: '#a8350a' }}
                 >
-                  <span>🚫 {cortes.length} corte{cortes.length > 1 ? 's' : ''} de ruta en el trayecto</span>
+                  <span>🚫 {cortes.length} corte{cortes.length > 1 ? 's' : ''} sobre tu ruta (rutas y autopistas)</span>
                   <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11 }}>{verCortes ? '▾ ocultar' : '▸ ver dónde'}</span>
                 </button>
                 {verCortes && (
@@ -1826,8 +1829,18 @@ function TraficoWidget({ loading, traficoRuta }: {
                         </span>
                       </div>
                     ))}
+                    {cortesUrbanos > 0 && (
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#8a6a55', lineHeight: 1.4, padding: '2px 2px' }}>
+                        + {cortesUrbanos} cierre{cortesUrbanos > 1 ? 's' : ''} en calles urbanas de ciudades del corredor (no afectan tu ruta principal).
+                      </div>
+                    )}
                   </div>
                 )}
+              </div>
+            ) : cortesUrbanos > 0 && (
+              <div style={{ marginBottom: 10, padding: '8px 12px', background: '#f1f8f1', border: '1px solid #c8e6c9', borderRadius: 8, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#2e7d32', lineHeight: 1.4 }}>
+                ✅ Sin cortes sobre rutas o autopistas de tu trayecto.
+                <span style={{ color: '#6b6560' }}> ({cortesUrbanos} cierre{cortesUrbanos > 1 ? 's' : ''} en calles urbanas del corredor, no afectan tu ruta principal.)</span>
               </div>
             )}
 
