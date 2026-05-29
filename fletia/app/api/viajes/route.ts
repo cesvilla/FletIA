@@ -18,6 +18,7 @@ export async function POST(request: Request) {
         destino: body.destino || null,
         kilometros: body.kilometros,
         peso_carga: body.peso_carga,
+        detalle_carga: body.detalle_carga || null,
         tipo_ruta: body.tipo_ruta || 'mixta',
         terreno: body.terreno || 'plano',
         precio_combustible: body.precio_combustible,

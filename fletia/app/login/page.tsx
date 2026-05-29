@@ -240,7 +240,7 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="text-center mt-6">
           <p className="font-mono text-[10px] text-ink-3 tracking-[1px]">
-            // FletIA v0.1 — Sprint 1
+            // combustible inteligente
           </p>
         </div>
 

@@ -110,6 +110,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     destino: '',
     kilometros: '',
     peso_carga: '',
+    detalle_carga: '',
     tipo_ruta: 'mixta',
     terreno: 'plano',
     precio_combustible: '1200',
@@ -972,6 +973,21 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                           style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
                         />
                       </div>
+                    </div>
+
+                    {/* Detalle de carga */}
+                    <div>
+                      <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>
+                        Detalle de carga <span style={{ color: '#8a8278' }}>opcional</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={form.detalle_carga}
+                        onChange={e => setForm(p => ({ ...p, detalle_carga: e.target.value }))}
+                        placeholder="ej: Granos, acero, maquinaria agrícola..."
+                        className="w-full px-3 py-2.5 text-sm outline-none"
+                        style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
+                      />
                     </div>
 
                     {/* Tipo ruta y terreno */}
