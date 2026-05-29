@@ -56,6 +56,11 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
   const [mesSeleccionado, setMesSeleccionado] = useState('');
   const [camionSeleccionado, setCamionSeleccionado] = useState('');
   const [exportando, setExportando] = useState<'pdf' | 'excel' | null>(null);
+  // Entrenamiento rápido inline
+  const [entrenando, setEntrenando] = useState<string | null>(null);
+  const [litrosQuick, setLitrosQuick] = useState('');
+  const [guardandoQuick, setGuardandoQuick] = useState(false);
+  const [precisionMap, setPrecisionMap] = useState<Record<string, { precisionPct: number; consumoBaseNuevo: number; viajesEntrenados: number }>>({});
 
   // Meses únicos disponibles
   const mesesDisponibles = useMemo(() => {
@@ -134,9 +139,13 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
       });
       const json = await res.json();
       if (json.ok) {
+        const precStr = json.precisionPct !== undefined ? ` · Precisión: ${json.precisionPct}%` : '';
         mensajeIA = json.aprendio
-          ? ` · IA actualizada: ${json.consumoBaseAnterior} → ${json.consumoBaseNuevo} L/100km`
-          : ' · IA: estimación ya era correcta';
+          ? ` · IA actualizada: ${json.consumoBaseNuevo} L/100km (${json.viajesEntrenados} viajes${precStr})`
+          : ` · IA confirmada${precStr}`;
+        if (json.precisionPct !== undefined) {
+          setPrecisionMap(prev => ({ ...prev, [v.id]: { precisionPct: json.precisionPct, consumoBaseNuevo: json.consumoBaseNuevo, viajesEntrenados: json.viajesEntrenados } }));
+        }
       }
     }
     setViajes(prev => prev.map(x =>
@@ -147,6 +156,31 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
     setMensaje({ id: v.id, texto: '✓ Guardado' + mensajeIA, ok: true });
     setGuardando(false);
     setTimeout(() => { setEditando(null); setMensaje(null); }, 2200);
+  }
+
+  // ─── ENTRENAMIENTO RÁPIDO INLINE ──────────────────────────────────
+  async function guardarLitrosRapido(v: Viaje) {
+    const litrosNum = parseFloat(litrosQuick);
+    if (isNaN(litrosNum) || litrosNum <= 0) return;
+    setGuardandoQuick(true);
+    try {
+      const res = await fetch('/api/viajes/aprender', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ viaje_id: v.id, litros_reales: litrosNum }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setViajes(prev => prev.map(x => x.id === v.id ? { ...x, litros_reales: litrosNum } : x));
+        if (json.precisionPct !== undefined) {
+          setPrecisionMap(prev => ({ ...prev, [v.id]: { precisionPct: json.precisionPct, consumoBaseNuevo: json.consumoBaseNuevo, viajesEntrenados: json.viajesEntrenados } }));
+        }
+      }
+      setEntrenando(null);
+      setLitrosQuick('');
+    } finally {
+      setGuardandoQuick(false);
+    }
   }
 
   // ─── EXPORTAR EXCEL ───────────────────────────────────────────────
@@ -695,6 +729,26 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                               <div className="text-base md:text-lg font-bold">${v.costo_total.toLocaleString('es-AR')}</div>
                               <div className="hidden sm:block font-mono text-[9px] text-gray-400">${v.costo_por_km}/km</div>
                             </div>
+                            {/* Badge precisión o botón entrenar */}
+                            {v.litros_reales ? (
+                              <div className="hidden sm:block text-right flex-shrink-0">
+                                {(() => {
+                                  const prec = precisionMap[v.id]?.precisionPct ??
+                                    Math.round(Math.max(0, 100 - Math.abs((v.litros_reales - v.litros_totales) / v.litros_totales * 100)) * 10) / 10;
+                                  const color = prec >= 90 ? '#1a6b3a' : prec >= 75 ? '#c8860a' : '#d4440c';
+                                  return <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color }}>✓ {prec}%</span>;
+                                })()}
+                              </div>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setEntrenando(v.id); setLitrosQuick(''); }}
+                                className="hidden sm:flex items-center gap-1 px-2 py-1 flex-shrink-0 transition-colors"
+                                style={{ border: '1px solid rgba(212,68,12,0.35)', color: '#d4440c', fontFamily: 'DM Mono, monospace', fontSize: '9px' }}
+                                title="Cargar litros reales para que la IA aprenda"
+                              >
+                                ⚡ Entrenar
+                              </button>
+                            )}
                             <button
                               onClick={(e) => abrirEdicion(e, v)}
                               className={`p-2 rounded transition-colors text-sm ${editando === v.id ? 'bg-gray-100 text-gray-400' : 'hover:bg-orange-50 text-gray-400 hover:text-orange-500'}`}
@@ -702,6 +756,46 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                             >✏️</button>
                           </div>
                         </div>
+
+                        {/* ── Entrenamiento rápido inline ── */}
+                        {entrenando === v.id && !v.litros_reales && (
+                          <div
+                            className="px-4 py-3 md:px-6 border-t flex flex-wrap items-center gap-3"
+                            style={{ backgroundColor: 'rgba(212,68,12,0.04)', borderColor: 'rgba(212,68,12,0.15)' }}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#d4440c', textTransform: 'uppercase', letterSpacing: '1px', flexShrink: 0 }}>
+                              ⚡ Litros reales del viaje
+                            </div>
+                            <input
+                              type="number"
+                              value={litrosQuick}
+                              onChange={e => setLitrosQuick(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') guardarLitrosRapido(v); if (e.key === 'Escape') setEntrenando(null); }}
+                              placeholder={`estimado: ${v.litros_totales} lts`}
+                              min="1"
+                              step="0.1"
+                              autoFocus
+                              className="text-sm px-3 py-1.5 outline-none"
+                              style={{ border: '1px solid rgba(212,68,12,0.4)', backgroundColor: '#fff', width: '160px' }}
+                            />
+                            <button
+                              onClick={() => guardarLitrosRapido(v)}
+                              disabled={guardandoQuick || !litrosQuick}
+                              className="px-3 py-1.5 text-white text-xs font-bold disabled:opacity-50 transition-opacity"
+                              style={{ backgroundColor: '#d4440c' }}
+                            >
+                              {guardandoQuick ? 'Guardando...' : 'Guardar y entrenar IA'}
+                            </button>
+                            <button
+                              onClick={() => setEntrenando(null)}
+                              className="text-xs px-2 py-1.5"
+                              style={{ color: '#8a8278' }}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
 
                         {abierto && (
                           <div className="border-t border-gray-100" style={{ backgroundColor: '#fafafa' }}>
@@ -721,31 +815,18 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                                     </div>
                                   ))}
                                 </div>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-                                  <div className="bg-white border border-gray-200 p-3">
-                                    <div className="font-mono text-[8px] text-gray-400 uppercase mb-1">Tipo de ruta</div>
-                                    <div className="text-sm font-medium">{v.tipo_ruta ? RUTA_LABEL[v.tipo_ruta] || v.tipo_ruta : '—'}</div>
-                                  </div>
-                                  <div className="bg-white border border-gray-200 p-3">
-                                    <div className="font-mono text-[8px] text-gray-400 uppercase mb-1">Terreno</div>
-                                    <div className="text-sm font-medium">{v.terreno ? TERRENO_LABEL[v.terreno] || v.terreno : '—'}</div>
-                                  </div>
+                                <div className="grid grid-cols-2 gap-3 mb-4">
                                   <div className="bg-white border border-gray-200 p-3">
                                     <div className="font-mono text-[8px] text-gray-400 uppercase mb-1">Precio gasoil</div>
                                     <div className="text-sm font-medium">{v.precio_combustible ? `$${v.precio_combustible.toLocaleString('es-AR')}/lts` : '—'}</div>
                                   </div>
-                                </div>
-                                {(v.factor_peso || v.factor_ruta || v.factor_terreno) && (
-                                  <div className="mb-4">
-                                    <div className="font-mono text-[8px] text-gray-400 uppercase mb-2">Factores aplicados por la IA</div>
-                                    <div className="flex gap-2 flex-wrap">
-                                      {v.factor_peso && <span className="px-2 py-1 bg-white border border-gray-200 font-mono text-[9px]">Peso ×{v.factor_peso}</span>}
-                                      {v.factor_ruta && <span className="px-2 py-1 bg-white border border-gray-200 font-mono text-[9px]">Ruta ×{v.factor_ruta}</span>}
-                                      {v.factor_terreno && <span className="px-2 py-1 bg-white border border-gray-200 font-mono text-[9px]">Terreno ×{v.factor_terreno}</span>}
-                                      {v.porcentaje_carga !== undefined && <span className="px-2 py-1 bg-white border border-gray-200 font-mono text-[9px]">Carga {v.porcentaje_carga}%</span>}
+                                  {v.porcentaje_carga !== undefined && (
+                                    <div className="bg-white border border-gray-200 p-3">
+                                      <div className="font-mono text-[8px] text-gray-400 uppercase mb-1">% de carga</div>
+                                      <div className="text-sm font-medium">{v.porcentaje_carga}% de capacidad</div>
                                     </div>
-                                  </div>
-                                )}
+                                  )}
+                                </div>
                                 {v.flete_cobrado && margen && (
                                   <div className="mb-4 p-4 border" style={{ backgroundColor: parseFloat(margen) > 0 ? 'rgba(26,107,58,0.06)' : 'rgba(212,68,12,0.06)', borderColor: parseFloat(margen) > 0 ? 'rgba(26,107,58,0.25)' : 'rgba(212,68,12,0.25)' }}>
                                     <div className="font-mono text-[8px] text-gray-400 uppercase mb-2">Rentabilidad del flete</div>
@@ -763,9 +844,50 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                                     </div>
                                   </div>
                                 )}
-                                {v.litros_reales && (
-                                  <div className="mb-4 px-3 py-2 bg-green-50 border border-green-200 font-mono text-[10px] text-green-700">
-                                    ✓ Consumo real registrado: {v.litros_reales} lts · Diferencia: {(v.litros_reales - v.litros_totales).toFixed(1)} lts vs estimado
+                                {v.litros_reales ? (
+                                  <div className="mb-4 p-3 border" style={{ backgroundColor: 'rgba(26,107,58,0.06)', borderColor: 'rgba(26,107,58,0.25)' }}>
+                                    {(() => {
+                                      const prec = precisionMap[v.id]?.precisionPct ??
+                                        Math.round(Math.max(0, 100 - Math.abs((v.litros_reales - v.litros_totales) / v.litros_totales * 100)) * 10) / 10;
+                                      const ve = precisionMap[v.id]?.viajesEntrenados;
+                                      const cb = precisionMap[v.id]?.consumoBaseNuevo;
+                                      const color = prec >= 90 ? '#1a6b3a' : prec >= 75 ? '#c8860a' : '#d4440c';
+                                      const diff = v.litros_reales - v.litros_totales;
+                                      return (
+                                        <div className="flex items-center justify-between flex-wrap gap-2">
+                                          <div>
+                                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', color: '#8a8278', textTransform: 'uppercase', marginBottom: '4px' }}>
+                                              ⚡ Consumo real registrado
+                                            </div>
+                                            <div className="text-sm font-semibold" style={{ color: '#1a1714' }}>
+                                              {v.litros_reales} lts reales · {v.litros_totales} lts estimados
+                                            </div>
+                                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', marginTop: '2px' }}>
+                                              Diferencia: {diff > 0 ? '+' : ''}{diff.toFixed(1)} lts
+                                              {cb ? ` · Consumo base camión: ${cb} L/100km` : ''}
+                                              {ve ? ` · ${ve} viajes entrenados` : ''}
+                                            </div>
+                                          </div>
+                                          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '36px', fontWeight: 900, color, lineHeight: 1 }}>
+                                            {prec}%
+                                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', color, opacity: 0.8 }}>PRECISIÓN</div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+                                ) : (
+                                  <div className="mb-4 px-3 py-2.5 flex items-center justify-between" style={{ backgroundColor: 'rgba(212,68,12,0.05)', border: '1px solid rgba(212,68,12,0.2)' }}>
+                                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>
+                                      Sin datos reales — la IA aún no aprendió de este viaje
+                                    </div>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setEntrenando(v.id); setLitrosQuick(''); setExpandido(null); }}
+                                      className="text-xs font-bold px-3 py-1.5 text-white transition-opacity"
+                                      style={{ backgroundColor: '#d4440c' }}
+                                    >
+                                      ⚡ Cargar litros reales
+                                    </button>
                                   </div>
                                 )}
                                 {v.descripcion_ia && (

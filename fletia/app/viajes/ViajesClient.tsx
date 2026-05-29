@@ -1099,6 +1099,21 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       </div>
                     )}
 
+                    {/* Recordatorio: cargar litros reales post-viaje */}
+                    {confirmado && (
+                      <div style={{ padding:'12px 16px', backgroundColor:'rgba(212,68,12,0.05)', border:'1px solid rgba(212,68,12,0.18)', borderTop:'none' }}>
+                        <div style={{ fontFamily:'DM Mono,monospace', fontSize:'9px', color:'#d4440c', textTransform:'uppercase', letterSpacing:'1px', marginBottom:'5px' }}>
+                          ⚡ Acordate cuando termines el viaje
+                        </div>
+                        <div style={{ fontSize:'12px', color:'#5a3000', lineHeight:'1.5', marginBottom:'10px' }}>
+                          Cargá los <strong>litros reales consumidos</strong> en el Historial. Con ese dato la IA ajusta el consumo base de este camión y cada estimación futura va a ser más precisa.
+                        </div>
+                        <a href="/historial" style={{ fontFamily:'DM Mono,monospace', fontSize:'11px', color:'#d4440c', fontWeight:700 }}>
+                          → Ir al historial a cargar litros reales
+                        </a>
+                      </div>
+                    )}
+
                     {/* Rentabilidad */}
                     {margenNeto && (
                       <div className="p-4 border" style={{ backgroundColor: parseFloat(margenNeto) > 0 ? 'rgba(26,107,58,0.08)' : 'rgba(212,68,12,0.08)', borderColor: parseFloat(margenNeto) > 0 ? 'rgba(26,107,58,0.3)' : 'rgba(212,68,12,0.3)' }}>
