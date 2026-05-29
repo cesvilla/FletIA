@@ -13,16 +13,16 @@ interface SegmentoTrafico {
   nivel: NivelTrafico;
   emoji: string;
   color: string;
-  demora: number;           // minutos extra estimados
+  demora: number;           // minutos extra REALES (de TomTom) en el tramo monitoreado
   incidentes: Incidente[];
-  bajaCobertua: boolean;    // true si TomTom no tiene datos reales del tramo
+  bajaCobertua: boolean;    // true si TomTom no tiene datos de flujo del tramo
 }
 
 interface Incidente {
   tipo: string;
   emoji: string;
   descripcion: string;
-  gravedad: number; // 1-4
+  gravedad: number; // 1-4 (magnitudeOfDelay de TomTom)
 }
 
 function clasificarTrafico(velocidadActual: number, velocidadLibre: number): {
@@ -69,34 +69,38 @@ async function reversGeocode(lat: number, lon: number): Promise<string> {
   }
 }
 
-// Consultar TomTom Traffic Flow para un punto
+// Consultar TomTom Traffic Flow para un punto (velocidades y tiempos REALES)
 async function consultarFlow(lat: number, lon: number, apiKey: string): Promise<{
   velocidadActual: number;
   velocidadLibre: number;
+  demoraSeg: number; // segundos extra reales en el segmento monitoreado
 } | null> {
   try {
     const url = `https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point=${lat},${lon}&unit=KMPH&key=${apiKey}`;
-    const res = await fetch(url, { next: { revalidate: 300 } }); // cache 5 min
+    const res = await fetch(url, { next: { revalidate: 180 } }); // cache 3 min
     if (!res.ok) return null;
     const data = await res.json();
     const flow = data.flowSegmentData;
     if (!flow) return null;
-    return {
-      velocidadActual: Math.round(flow.currentSpeed ?? 0),
-      velocidadLibre: Math.round(flow.freeFlowSpeed ?? flow.currentSpeed ?? 80),
-    };
+    const current = Math.round(flow.currentSpeed ?? 0);
+    const libre = Math.round(flow.freeFlowSpeed ?? flow.currentSpeed ?? 80);
+    const demoraSeg = Math.max(0, (flow.currentTravelTime ?? 0) - (flow.freeFlowTravelTime ?? 0));
+    return { velocidadActual: current, velocidadLibre: libre, demoraSeg };
   } catch {
     return null;
   }
 }
 
-// Consultar TomTom Traffic Incidents en un bbox alrededor del punto
+// Consultar TomTom Traffic Incidents en un bbox alrededor del punto (datos REALES)
 async function consultarIncidentes(lat: number, lon: number, apiKey: string): Promise<Incidente[]> {
   try {
     const delta = 0.15; // ~15km alrededor
     const bbox = `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`;
-    const url = `https://api.tomtom.com/traffic/services/5/incidentDetails?bbox=${bbox}&fields={incidents{type,geometry{type,coordinates},properties{id,iconCategory,magnitudeOfDelay,events{description,code,iconCategory},startTime,endTime,from,to,length,delay,roadNumbers,timeValidity}}}&language=es-419&t=1111&categoryFilter=0,1,2,3,4,5,6,7,8,9,10,11&timeValidityFilter=present&key=${apiKey}`;
-    const res = await fetch(url, { next: { revalidate: 300 } });
+    const fields = '{incidents{type,properties{iconCategory,magnitudeOfDelay,events{description,code},from,to,delay}}}';
+    const url = `https://api.tomtom.com/traffic/services/5/incidentDetails?bbox=${bbox}` +
+      `&fields=${encodeURIComponent(fields)}&language=es-ES` +
+      `&categoryFilter=0,1,2,3,4,5,6,7,8,9,10,11&timeValidityFilter=present&key=${apiKey}`;
+    const res = await fetch(url, { next: { revalidate: 180 } });
     if (!res.ok) return [];
     const data = await res.json();
     const incidents = data.incidents ?? [];
@@ -105,27 +109,32 @@ async function consultarIncidentes(lat: number, lon: number, apiKey: string): Pr
       0:  { tipo: 'Desconocido',    emoji: '⚠️' },
       1:  { tipo: 'Accidente',      emoji: '🚨' },
       2:  { tipo: 'Niebla',         emoji: '🌫️' },
-      3:  { tipo: 'Hielo',          emoji: '🧊' },
+      3:  { tipo: 'Condición peligrosa', emoji: '⚠️' },
       4:  { tipo: 'Lluvia',         emoji: '🌧️' },
-      5:  { tipo: 'Viento',         emoji: '💨' },
+      5:  { tipo: 'Hielo',          emoji: '🧊' },
       6:  { tipo: 'Congestión',     emoji: '🔴' },
-      7:  { tipo: 'Obras viales',   emoji: '🚧' },
-      8:  { tipo: 'Ruta cortada',   emoji: '🚫' },
-      9:  { tipo: 'Peligro',        emoji: '⚠️' },
+      7:  { tipo: 'Carril cerrado', emoji: '🚧' },
+      8:  { tipo: 'Ruta cerrada',   emoji: '🚫' },
+      9:  { tipo: 'Obras viales',   emoji: '🚧' },
       10: { tipo: 'Clima adverso',  emoji: '⛈️' },
-      11: { tipo: 'Congestión',     emoji: '🔴' },
+      11: { tipo: 'Vehículo detenido', emoji: '🚙' },
+      14: { tipo: 'Accidente',      emoji: '🚨' },
     };
 
-    return incidents.slice(0, 3).map((inc: any) => {
+    return incidents.map((inc: any) => {
       const cat = inc.properties?.iconCategory ?? 0;
       const mapped = TIPO_MAP[cat] ?? { tipo: 'Incidente', emoji: '⚠️' };
-      const desc = inc.properties?.events?.[0]?.description
-        || inc.properties?.from
-        || mapped.tipo;
+      const evento = inc.properties?.events?.[0]?.description;
+      const from = inc.properties?.from;
+      const to = inc.properties?.to;
+      // Descripción real con ubicación: "Cerrado — Calle X → Calle Y"
+      let descripcion = evento || mapped.tipo;
+      if (from && to && from !== to) descripcion += ` — ${from} → ${to}`;
+      else if (from) descripcion += ` — ${from}`;
       return {
         tipo: mapped.tipo,
         emoji: mapped.emoji,
-        descripcion: desc,
+        descripcion,
         gravedad: inc.properties?.magnitudeOfDelay ?? 1,
       };
     });
@@ -134,46 +143,26 @@ async function consultarIncidentes(lat: number, lon: number, apiKey: string): Pr
   }
 }
 
-// Datos de demostración cuando no hay key activa
-function datosDemo(puntos: [number, number][], nombres: string[]): SegmentoTrafico[] {
-  const escenarios: { vel: number; libre: number; incidentes: Incidente[] }[] = [
-    { vel: 95, libre: 110, incidentes: [] },
-    { vel: 70, libre: 110, incidentes: [{ tipo: 'Obras viales', emoji: '🚧', descripcion: 'Obras en calzada — carril derecho cerrado', gravedad: 2 }] },
-    { vel: 110, libre: 110, incidentes: [] },
-    { vel: 40, libre: 100, incidentes: [{ tipo: 'Accidente', emoji: '🚨', descripcion: 'Colisión en banquina — precaución', gravedad: 3 }] },
-    { vel: 90, libre: 110, incidentes: [] },
-  ];
-
-  return puntos.map(([lat, lon], i) => {
-    const esc = escenarios[i % escenarios.length];
-    const { nivel, emoji, color } = clasificarTrafico(esc.vel, esc.libre);
-    const demora = esc.incidentes.length > 0
-      ? Math.round(((esc.libre - esc.vel) / esc.libre) * 20)
-      : 0;
-    return {
-      lat, lon,
-      nombre: nombres[i] || `Tramo ${i + 1}`,
-      velocidadActual: esc.vel,
-      velocidadLibre: esc.libre,
-      nivel,
-      emoji,
-      color,
-      demora,
-      incidentes: esc.incidentes,
-      bajaCobertua: false,
-    };
-  });
-}
-
 export async function POST(request: Request) {
   try {
-    const { polyline, km = 0 } = await request.json();
+    const { polyline } = await request.json();
 
     if (!polyline || !Array.isArray(polyline) || polyline.length < 2) {
       return NextResponse.json({ error: 'Polyline inválida' }, { status: 400 });
     }
 
-    const PUNTOS = Math.min(5, polyline.length);
+    // Sin key → NO inventamos nada: informamos que no hay datos en tiempo real
+    if (!TOMTOM_KEY) {
+      return NextResponse.json({
+        disponible: false,
+        segmentos: [],
+        totalIncidentes: 0,
+        demoraTotal: 0,
+        tramosConBajaCobertura: 0,
+      });
+    }
+
+    const PUNTOS = Math.min(6, polyline.length);
     const muestras = muestrarPuntos(polyline, PUNTOS);
 
     // Geocodificar nombres de los tramos
@@ -181,18 +170,7 @@ export async function POST(request: Request) {
       muestras.map(([lat, lon]) => reversGeocode(lat, lon))
     );
 
-    // Sin key activa → devolver demo para mostrar UI
-    if (!TOMTOM_KEY) {
-      const segmentos = datosDemo(muestras, nombres);
-      return NextResponse.json({
-        segmentos,
-        totalIncidentes: segmentos.reduce((n, s) => n + s.incidentes.length, 0),
-        demoraTotal: segmentos.reduce((n, s) => n + s.demora, 0),
-        esDemo: true,
-      });
-    }
-
-    // Con key activa → consultar TomTom en paralelo
+    // Consultar TomTom (flujo + incidentes) en paralelo — todo dato REAL
     const segmentos: SegmentoTrafico[] = await Promise.all(
       muestras.map(async ([lat, lon], i) => {
         const [flow, incidentes] = await Promise.all([
@@ -201,12 +179,12 @@ export async function POST(request: Request) {
         ]);
 
         const sinDatos = flow === null;
-        const vel = flow?.velocidadActual ?? 80;
-        const libre = flow?.velocidadLibre ?? 90;
-        const { nivel, emoji, color } = clasificarTrafico(vel, libre);
-        const demora = incidentes.length > 0
-          ? Math.round(((libre - vel) / libre) * 25)
-          : Math.max(0, Math.round(((libre - vel) / libre) * 15));
+        const vel = flow?.velocidadActual ?? 0;
+        const libre = flow?.velocidadLibre ?? 0;
+        const { nivel, emoji, color } = sinDatos
+          ? { nivel: 'fluido' as NivelTrafico, emoji: '⚪', color: '#8a8278' }
+          : clasificarTrafico(vel, libre);
+        const demora = flow ? Math.round(flow.demoraSeg / 60) : 0;
 
         return {
           lat, lon,
@@ -223,12 +201,25 @@ export async function POST(request: Request) {
       })
     );
 
+    // Deduplicar incidentes repetidos entre bboxes solapados
+    const vistos = new Set<string>();
+    let totalIncidentes = 0;
+    for (const seg of segmentos) {
+      seg.incidentes = seg.incidentes.filter(inc => {
+        const clave = `${inc.tipo}|${inc.descripcion}`;
+        if (vistos.has(clave)) return false;
+        vistos.add(clave);
+        return true;
+      });
+      totalIncidentes += seg.incidentes.length;
+    }
+
     return NextResponse.json({
+      disponible: true,
       segmentos,
-      totalIncidentes: segmentos.reduce((n, s) => n + s.incidentes.length, 0),
+      totalIncidentes,
       demoraTotal: segmentos.reduce((n, s) => n + s.demora, 0),
       tramosConBajaCobertura: segmentos.filter(s => s.bajaCobertua).length,
-      esDemo: false,
     });
 
   } catch (error: any) {

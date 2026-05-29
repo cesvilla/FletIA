@@ -9,6 +9,7 @@ export interface Camion {
   tipo_combustible: 'diesel' | 'gnc' | 'electrico';
   capacidad_max_ton: number;
   consumo_base_litros: number;
+  consumo_pendiente_litros: number | null;
   condicion: 'excelente' | 'buena' | 'regular';
   carroceria: 'semirremolque' | 'rigido_caja' | 'volcadora' | 'refrigerado';
   activo: boolean;

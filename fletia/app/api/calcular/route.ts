@@ -29,7 +29,8 @@ export async function POST(request: Request) {
     }
 
     const resultado = calcularViaje({
-      consumoBase: camion.consumo_base_litros,
+      consumoVacio: camion.consumo_base_litros,
+      pendienteCarga: camion.consumo_pendiente_litros ?? null,
       capacidadMax: camion.capacidad_max_ton,
       pesoCarga: body.peso_carga,
       kilometros: body.kilometros,

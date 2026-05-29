@@ -91,7 +91,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     totalIncidentes: number;
     demoraTotal: number;
     tramosConBajaCobertura: number;
-    esDemo: boolean;
+    disponible: boolean;
   } | null>(null);
   const [loadingTrafico, setLoadingTrafico] = useState(false);
   const [climaDetalle, setClimaDetalle] = useState<{
@@ -961,8 +961,8 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                               <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', color: '#d4440c', fontWeight: 700 }}>${p.precio.toLocaleString('es-AR')}</span>
                             </div>
                           ))}
-                          <div style={{ marginTop: '6px', fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>
-                            Precios aprox. categoría 5 (semirremolque). Ajustá en el campo "Peajes" si conocés el valor real.
+                          <div style={{ marginTop: '6px', fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', lineHeight: 1.5 }}>
+                            Precios de referencia categoría 5 (semirremolque), actualizados a may-2026. Las tarifas cambian seguido: verificá el valor vigente y ajustalo en el campo "Peajes".
                           </div>
                         </div>
                       </div>
@@ -1638,11 +1638,13 @@ function LitrosRealesForm({ viajeId, onAprendido }: { viajeId: string; onAprendi
   const [litros, setLitros] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!litros || parseFloat(litros) <= 0) return;
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/viajes/aprender', {
         method: 'POST',
@@ -1652,8 +1654,18 @@ function LitrosRealesForm({ viajeId, onAprendido }: { viajeId: string; onAprendi
       const data = await res.json();
       if (res.ok) {
         setDone(true);
-        onAprendido(data.mensaje);
+        const extra = data.pendienteCargaNueva != null
+          ? ` (vacío ${data.consumoVacioNuevo} · +${data.pendienteCargaNueva} L a plena carga`
+            + `${data.metodo === 'regresion' ? ', por regresión' : ''})`
+          : '';
+        onAprendido(
+          `🧠 IA actualizada${extra}. La estimación previa tuvo ${data.precisionPct}% de precisión.`
+        );
+      } else {
+        setError(data.error || 'No se pudo guardar. Intentá de nuevo.');
       }
+    } catch {
+      setError('Error de conexión. Intentá de nuevo.');
     } finally {
       setLoading(false);
     }
@@ -1662,27 +1674,34 @@ function LitrosRealesForm({ viajeId, onAprendido }: { viajeId: string; onAprendi
   if (done) return null;
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-center gap-2 px-6 pb-4">
-      <input
-        type="number"
-        value={litros}
-        onChange={e => setLitros(e.target.value)}
-        placeholder="Litros reales cargados"
-        step="0.1" min="1"
-        className="px-3 py-1.5 text-xs outline-none flex-1 max-w-[180px]"
-        style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
-      />
-      <button
-        type="submit"
-        disabled={loading || !litros}
-        className="px-3 py-1.5 text-xs text-white font-bold disabled:opacity-50"
-        style={{ backgroundColor: '#1a6b3a' }}
-      >
-        {loading ? '...' : '🧠 Enseñar IA'}
-      </button>
-      <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>
-        ¿Cuánto cargaste realmente?
-      </span>
+    <form onSubmit={handleSubmit} className="px-6 pb-4">
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          value={litros}
+          onChange={e => { setLitros(e.target.value); setError(null); }}
+          placeholder="Litros reales cargados"
+          step="0.1" min="1"
+          className="px-3 py-1.5 text-xs outline-none flex-1 max-w-[180px]"
+          style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
+        />
+        <button
+          type="submit"
+          disabled={loading || !litros}
+          className="px-3 py-1.5 text-xs text-white font-bold disabled:opacity-50"
+          style={{ backgroundColor: '#1a6b3a' }}
+        >
+          {loading ? '...' : '🧠 Enseñar IA'}
+        </button>
+        <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>
+          ¿Cuánto cargaste realmente?
+        </span>
+      </div>
+      {error && (
+        <div style={{ marginTop: 6, fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#a8350a', lineHeight: 1.4 }}>
+          ⚠️ {error}
+        </div>
+      )}
     </form>
   );
 }
@@ -1701,7 +1720,7 @@ type TraficoRutaData = {
   totalIncidentes: number;
   demoraTotal: number;
   tramosConBajaCobertura: number;
-  esDemo: boolean;
+  disponible: boolean;
 };
 
 function TraficoWidget({ loading, traficoRuta }: {
@@ -1719,17 +1738,17 @@ function TraficoWidget({ loading, traficoRuta }: {
           🚦 {loading ? 'Consultando estado del tráfico...' : 'Estado del tráfico en ruta'}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {traficoRuta?.esDemo && (
+          {!loading && traficoRuta && !traficoRuta.disponible && (
             <div style={{ background: 'rgba(26,23,20,0.08)', borderRadius: 4, padding: '3px 8px', fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>
-              DEMO
+              SIN DATOS
             </div>
           )}
-          {!loading && traficoRuta && (traficoRuta.demoraTotal > 0) && (
+          {!loading && traficoRuta?.disponible && (traficoRuta.demoraTotal > 0) && (
             <div style={{ background: '#c8860a', borderRadius: 4, padding: '3px 10px', fontFamily: 'DM Mono, monospace', fontSize: '10px', fontWeight: 700, color: '#fff' }}>
               ⏱ +{traficoRuta.demoraTotal} min
             </div>
           )}
-          {!loading && traficoRuta && traficoRuta.demoraTotal === 0 && (
+          {!loading && traficoRuta?.disponible && traficoRuta.demoraTotal === 0 && (
             <div style={{ background: '#1a6b3a', borderRadius: 4, padding: '3px 10px', fontFamily: 'DM Mono, monospace', fontSize: '10px', fontWeight: 700, color: '#fff' }}>
               ✓ Sin demoras
             </div>
@@ -1746,7 +1765,14 @@ function TraficoWidget({ loading, traficoRuta }: {
           </div>
         )}
 
-        {traficoRuta && !loading && (
+        {traficoRuta && !loading && !traficoRuta.disponible && (
+          <div style={{ padding: '14px 12px', textAlign: 'center', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#8a8278', lineHeight: 1.5 }}>
+            🚦 Estado de tráfico no disponible en este momento.<br />
+            <span style={{ fontSize: 11 }}>El servicio de tráfico en tiempo real no respondió. Probá de nuevo en unos minutos.</span>
+          </div>
+        )}
+
+        {traficoRuta && !loading && traficoRuta.disponible && (
           <>
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'thin', scrollbarColor: '#1a6b3a #f0ede8' }}>
               {traficoRuta.segmentos.map((s, i) => (
@@ -1811,12 +1837,19 @@ function TraficoWidget({ loading, traficoRuta }: {
               ))}
             </div>
 
-            {/* Resumen incidentes */}
+            {/* Resumen incidentes — detalle real con ubicación */}
             {traficoRuta.totalIncidentes > 0 ? (
               <div style={{ marginTop: 10, padding: '8px 12px', background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#856404', lineHeight: 1.5 }}>
-                ⚠️ <strong>{traficoRuta.totalIncidentes} incidente{traficoRuta.totalIncidentes > 1 ? 's' : ''}</strong> activo{traficoRuta.totalIncidentes > 1 ? 's' : ''} en la ruta.
-                {traficoRuta.demoraTotal > 0 && <> Demora estimada: <strong>+{traficoRuta.demoraTotal} minutos</strong>.</>}
-                {' '}Mantenete atento a las señales viales.
+                <div style={{ marginBottom: 6 }}>
+                  ⚠️ <strong>{traficoRuta.totalIncidentes} incidente{traficoRuta.totalIncidentes > 1 ? 's' : ''}</strong> activo{traficoRuta.totalIncidentes > 1 ? 's' : ''} en la ruta
+                  {traficoRuta.demoraTotal > 0 && <> · demora real <strong>+{traficoRuta.demoraTotal} min</strong></>}:
+                </div>
+                {traficoRuta.segmentos.flatMap(s => s.incidentes).map((inc, k) => (
+                  <div key={k} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', padding: '2px 0' }}>
+                    <span style={{ flexShrink: 0 }}>{inc.emoji}</span>
+                    <span><strong>{inc.tipo}</strong>{inc.descripcion && inc.descripcion !== inc.tipo ? `: ${inc.descripcion.replace(inc.tipo, '').replace(/^[\s—:]+/, '')}` : ''}</span>
+                  </div>
+                ))}
               </div>
             ) : (
               <div style={{ marginTop: 10, padding: '8px 12px', background: '#f1f8f1', border: '1px solid #c8e6c9', borderRadius: 6, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#2e7d32' }}>
@@ -1825,13 +1858,7 @@ function TraficoWidget({ loading, traficoRuta }: {
               </div>
             )}
 
-            {traficoRuta.esDemo && (
-              <div style={{ marginTop: 6, padding: '6px 12px', background: 'rgba(26,23,20,0.04)', border: '1px solid rgba(26,23,20,0.1)', borderRadius: 6, fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#8a8278' }}>
-                ℹ️ Datos de demostración. Agregá tu API key de TomTom en .env.local para datos en tiempo real.
-              </div>
-            )}
-
-            {!traficoRuta.esDemo && (traficoRuta.tramosConBajaCobertura ?? 0) > 0 && (
+            {(traficoRuta.tramosConBajaCobertura ?? 0) > 0 && (
               <div style={{ marginTop: 6, padding: '8px 12px', background: 'rgba(138,130,120,0.08)', border: '1px solid rgba(138,130,120,0.25)', borderRadius: 6, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#6b6560', lineHeight: 1.5, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                 <span style={{ fontSize: 16, flexShrink: 0 }}>📡</span>
                 <span>
@@ -1872,7 +1899,7 @@ function ClimaWidget({ loading, climaRuta, onVerDetalle }: {
         </div>
         {climaRuta?.tieneAlertas && (
           <div style={{ background: '#ff9800', borderRadius: 4, padding: '3px 10px', fontFamily: 'DM Mono, monospace', fontSize: '10px', fontWeight: 700, color: '#fff' }}>
-            ⚠️ +{climaRuta.impactoMaximoPct}% COMBUSTIBLE
+            ⚠️ CLIMA ADVERSO
           </div>
         )}
       </div>
@@ -1914,7 +1941,7 @@ function ClimaWidget({ loading, climaRuta, onVerDetalle }: {
                   {p.lluvia > 0 && <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#5b8dd9', marginBottom: 2 }}>🌧️ {p.lluvia} mm</div>}
                   {p.impactoPct > 0 && (
                     <div style={{ marginTop: 5, background: '#f5a623', borderRadius: 4, padding: '2px 5px', fontFamily: 'DM Mono, monospace', fontSize: 10, fontWeight: 700, color: '#fff' }}>
-                      +{p.impactoPct}% comb.
+                      ↑ consumo
                     </div>
                   )}
                   <div style={{ marginTop: 6, fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#1a6b9a', lineHeight: 1.2 }}>
@@ -1929,7 +1956,7 @@ function ClimaWidget({ loading, climaRuta, onVerDetalle }: {
 
             {climaRuta.tieneAlertas ? (
               <div style={{ marginTop: 10, padding: '8px 12px', background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#856404', lineHeight: 1.5 }}>
-                ⚠️ Hay condiciones climáticas adversas en la ruta que pueden incrementar el consumo hasta <strong>+{climaRuta.impactoMaximoPct}%</strong>. Hacé click en cada ciudad para ver el pronóstico de 4 días.
+                ⚠️ Hay condiciones climáticas adversas en la ruta (lluvia, viento o nieve) que suelen aumentar el consumo. Es <strong>informativo</strong>: no está incluido en el costo calculado. Hacé click en cada ciudad para ver el pronóstico de 4 días.
               </div>
             ) : (
               <div style={{ marginTop: 10, padding: '8px 12px', background: '#f1f8f1', border: '1px solid #c8e6c9', borderRadius: 6, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#2e7d32' }}>
