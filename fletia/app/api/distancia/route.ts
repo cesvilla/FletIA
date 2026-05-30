@@ -138,13 +138,16 @@ interface RutaCalculada {
   duracionMin?: number; // duración estimada en minutos
 }
 
-// OpenRouteService — perfil driving-hgv (camiones pesados), más preciso para Argentina
-// Pide rutas alternativas para que el camionero elija la que va a tomar.
+// OpenRouteService — perfil driving-hgv (camiones pesados), más preciso para Argentina.
+// Una request = una ruta según la preferencia (recommended/shortest/fastest).
+// NOTA: el parámetro `alternative_routes` de ORS sólo funciona para rutas ≤100km,
+// por eso usamos variaciones de `preference` que no tienen límite de distancia.
 async function calcularRutaORS(
   origen: { lat: number; lon: number },
   destino: { lat: number; lon: number },
-  apiKey: string
-): Promise<RutaCalculada[] | null> {
+  apiKey: string,
+  preference: 'recommended' | 'shortest' | 'fastest' = 'recommended'
+): Promise<RutaCalculada | null> {
   const res = await fetchConTimeout('https://api.openrouteservice.org/v2/directions/driving-hgv/geojson', {
     method: 'POST',
     headers: {
@@ -156,31 +159,25 @@ async function calcularRutaORS(
         [origen.lon, origen.lat],
         [destino.lon, destino.lat],
       ],
-      alternative_routes: {
-        target_count: 3,
-        share_factor: 0.6,
-        weight_factor: 1.6,
-      },
+      preference,
     }),
   }, 12000);
   if (!res || !res.ok) return null;
   const data = await res.json();
-  const features = data.features;
-  if (!features?.length) return null;
+  const feature = data.features?.[0];
+  if (!feature) return null;
 
-  return features.map((feature: any) => {
-    const distanciaM: number = feature.properties.summary.distance;
-    const duracionS: number = feature.properties.summary.duration;
-    const km = Math.round(distanciaM / 1000);
-    const duracionMin = Math.round(duracionS / 60);
+  const distanciaM: number = feature.properties.summary.distance;
+  const duracionS: number = feature.properties.summary.duration;
+  const km = Math.round(distanciaM / 1000);
+  const duracionMin = Math.round(duracionS / 60);
 
-    // GeoJSON coordinates vienen como [lon, lat] — invertir a [lat, lon] para Leaflet
-    const polyline: [number, number][] = feature.geometry.coordinates.map(
-      ([lon, lat]: [number, number]) => [lat, lon]
-    );
+  // GeoJSON coordinates vienen como [lon, lat] — invertir a [lat, lon] para Leaflet
+  const polyline: [number, number][] = feature.geometry.coordinates.map(
+    ([lon, lat]: [number, number]) => [lat, lon]
+  );
 
-    return { km, polyline, duracionMin };
-  });
+  return { km, polyline, duracionMin };
 }
 
 // OSRM — fallback gratuito sin key, con alternativas
@@ -225,7 +222,31 @@ export async function POST(request: Request) {
     let motor = orsKey ? 'ors-hgv' : 'osrm';
 
     if (orsKey) {
-      rutas = await calcularRutaORS(coordOrigen, coordDestino, orsKey);
+      // Pedimos en paralelo la ruta recomendada y la más corta. Como `preference`
+      // no tiene límite de distancia, esto funciona para viajes de cualquier largo.
+      const [recomendada, corta] = await Promise.all([
+        calcularRutaORS(coordOrigen, coordDestino, orsKey, 'recommended'),
+        calcularRutaORS(coordOrigen, coordDestino, orsKey, 'shortest'),
+      ]);
+
+      if (recomendada) {
+        rutas = [recomendada];
+        // Agregamos la "más corta" si es realmente distinta: diferencia notable en
+        // km (>1%) o en duración (>10%). Así detectamos rutas físicamente distintas
+        // aunque tengan kilometraje parecido.
+        if (corta) {
+          const difKm = Math.abs(corta.km - recomendada.km) / recomendada.km;
+          const difMin =
+            recomendada.duracionMin && corta.duracionMin
+              ? Math.abs(corta.duracionMin - recomendada.duracionMin) / recomendada.duracionMin
+              : 0;
+          if (difKm > 0.01 || difMin > 0.1) {
+            rutas.push(corta);
+          }
+        }
+      } else if (corta) {
+        rutas = [corta];
+      }
     }
 
     // Fallback a OSRM si no hay key o si ORS falla
