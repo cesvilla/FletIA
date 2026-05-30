@@ -39,14 +39,23 @@ function AjustarVista({ polyline }: { polyline: [number, number][] }) {
   return null;
 }
 
+export interface RutaAlternativa {
+  km: number;
+  polyline: [number, number][];
+  duracionMin?: number;
+  peajes?: { plazas: Array<{ nombre: string; ruta: string; precio: number }>; total: number };
+}
+
 interface Props {
   polyline: [number, number][];
   origen: { lat: number; lon: number; nombre: string };
   destino: { lat: number; lon: number; nombre: string };
   km: number;
+  rutasAlternativas?: RutaAlternativa[];
+  onSeleccionarAlternativa?: (index: number) => void;
 }
 
-export default function MapaRuta({ polyline, origen, destino, km }: Props) {
+export default function MapaRuta({ polyline, origen, destino, km, rutasAlternativas, onSeleccionarAlternativa }: Props) {
   const centro: [number, number] = [
     (origen.lat + destino.lat) / 2,
     (origen.lon + destino.lon) / 2,
@@ -78,7 +87,19 @@ export default function MapaRuta({ polyline, origen, destino, km }: Props) {
 
         <AjustarVista polyline={polyline} />
 
-        {/* Línea de ruta */}
+        {/* Rutas alternativas (en gris, detrás de la principal) */}
+        {rutasAlternativas?.map((alt, i) => (
+          <Polyline
+            key={`alt-${i}`}
+            positions={alt.polyline}
+            pathOptions={{ color: '#8a8278', weight: 4, opacity: 0.45, dashArray: '8 6' }}
+            eventHandlers={{
+              click: () => onSeleccionarAlternativa?.(i),
+            }}
+          />
+        ))}
+
+        {/* Línea de ruta principal */}
         <Polyline
           positions={polyline}
           pathOptions={{ color: '#d4440c', weight: 4, opacity: 0.85 }}

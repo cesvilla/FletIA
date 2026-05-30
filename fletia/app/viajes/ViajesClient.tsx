@@ -71,8 +71,15 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     origen: { lat: number; lon: number; nombre: string };
     destino: { lat: number; lon: number; nombre: string };
     km: number;
+    duracionMin?: number;
     peajes?: { plazas: Array<{ nombre: string; ruta: string; precio: number }>; total: number };
   } | null>(null);
+  const [rutasAlternativas, setRutasAlternativas] = useState<{
+    km: number;
+    polyline: [number, number][];
+    duracionMin?: number;
+    peajes?: { plazas: Array<{ nombre: string; ruta: string; precio: number }>; total: number };
+  }[]>([]);
   const [resultado, setResultado] = useState<ResultadoIA | null>(null);
   const [camionInfo, setCamionInfo] = useState<{ patente: string; marca: string; modelo: string } | null>(null);
   const [confirmando, setConfirmando] = useState(false);
@@ -153,7 +160,8 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
         throw new Error(msg);
       }
       setForm(p => ({ ...p, kilometros: String(data.km), peajes_total: data.peajes?.total ? String(data.peajes.total) : '' }));
-      setMapaData({ polyline: data.polyline, origen: data.origen, destino: data.destino, km: data.km, peajes: data.peajes });
+      setMapaData({ polyline: data.polyline, origen: data.origen, destino: data.destino, km: data.km, duracionMin: data.duracionMin, peajes: data.peajes });
+      setRutasAlternativas(data.rutasAlternativas || []);
       // Scroll a la columna derecha para mostrar clima y tráfico
       setTimeout(() => {
         rightColumnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -397,6 +405,39 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   }
 
   function handleCancelar() {
+    setResultado(null);
+    setCamionInfo(null);
+    setConfirmado(false);
+  }
+
+  // Seleccionar ruta alternativa: la alternativa elegida pasa a ser la principal
+  function handleSeleccionarRuta(indexAlt: number) {
+    if (!mapaData || indexAlt >= rutasAlternativas.length) return;
+    const alt = rutasAlternativas[indexAlt];
+    // La ruta actual se convierte en alternativa
+    const rutaActual = {
+      km: mapaData.km,
+      polyline: mapaData.polyline,
+      duracionMin: mapaData.duracionMin,
+      peajes: mapaData.peajes,
+    };
+    const nuevasAlts = [...rutasAlternativas];
+    nuevasAlts[indexAlt] = rutaActual;
+
+    setMapaData({
+      ...mapaData,
+      km: alt.km,
+      polyline: alt.polyline,
+      duracionMin: alt.duracionMin,
+      peajes: alt.peajes,
+    });
+    setRutasAlternativas(nuevasAlts);
+    setForm(p => ({
+      ...p,
+      kilometros: String(alt.km),
+      peajes_total: alt.peajes?.total ? String(alt.peajes.total) : '',
+    }));
+    // Limpiar resultado previo porque los km cambiaron
     setResultado(null);
     setCamionInfo(null);
     setConfirmado(false);
@@ -953,10 +994,45 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                           origen={mapaData.origen}
                           destino={mapaData.destino}
                           km={mapaData.km}
+                          rutasAlternativas={rutasAlternativas}
+                          onSeleccionarAlternativa={handleSeleccionarRuta}
                         />
+
+                        {/* Selector de rutas alternativas */}
+                        {rutasAlternativas.length > 0 && (
+                          <div style={{ padding: '8px 12px', backgroundColor: '#f7f5f2', borderTop: '1px solid rgba(26,23,20,0.1)', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '1px', marginRight: '4px' }}>Rutas:</span>
+                            {/* Ruta actual (seleccionada) */}
+                            <div style={{
+                              padding: '5px 10px', fontSize: '11px', fontWeight: 700, fontFamily: 'DM Mono, monospace',
+                              backgroundColor: '#d4440c', color: 'white', cursor: 'default',
+                            }}>
+                              ✓ {mapaData.km} km{mapaData.duracionMin ? ` · ${Math.floor(mapaData.duracionMin / 60)}h${String(mapaData.duracionMin % 60).padStart(2, '0')}m` : ''}
+                              {mapaData.peajes?.total ? ` · $${mapaData.peajes.total.toLocaleString('es-AR')} peajes` : ''}
+                            </div>
+                            {/* Alternativas */}
+                            {rutasAlternativas.map((alt, i) => (
+                              <button
+                                key={i}
+                                onClick={() => handleSeleccionarRuta(i)}
+                                style={{
+                                  padding: '5px 10px', fontSize: '11px', fontFamily: 'DM Mono, monospace',
+                                  backgroundColor: 'white', color: '#4a4540', border: '1px solid rgba(26,23,20,0.2)',
+                                  cursor: 'pointer', transition: 'all 0.15s',
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.borderColor = '#d4440c'; e.currentTarget.style.color = '#d4440c'; }}
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(26,23,20,0.2)'; e.currentTarget.style.color = '#4a4540'; }}
+                              >
+                                {alt.km} km{alt.duracionMin ? ` · ${Math.floor(alt.duracionMin / 60)}h${String(alt.duracionMin % 60).padStart(2, '0')}m` : ''}
+                                {alt.peajes?.total ? ` · $${alt.peajes.total.toLocaleString('es-AR')}` : ''}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
                         <div className="px-3 py-2.5" style={{ backgroundColor: '#fff8e7', borderTop: '2px solid #c8860a' }}>
                           <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', color: '#7a5000', fontWeight: 600 }}>
-                            ⚠ Distancia estimada por ruta vial. Puede variar según el recorrido real del chofer.
+                            ⚠ Distancia estimada por ruta vial{rutasAlternativas.length > 0 ? ' — elegí la ruta que vas a tomar' : '. Puede variar según el recorrido real del chofer'}.
                           </span>
                         </div>
                       </div>

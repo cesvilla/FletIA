@@ -131,12 +131,20 @@ function decodificarPolyline(encoded: string): [number, number][] {
   return coords;
 }
 
+// Tipo para una ruta calculada
+interface RutaCalculada {
+  km: number;
+  polyline: [number, number][];
+  duracionMin?: number; // duración estimada en minutos
+}
+
 // OpenRouteService — perfil driving-hgv (camiones pesados), más preciso para Argentina
+// Pide rutas alternativas para que el camionero elija la que va a tomar.
 async function calcularRutaORS(
   origen: { lat: number; lon: number },
   destino: { lat: number; lon: number },
   apiKey: string
-): Promise<{ km: number; polyline: [number, number][] } | null> {
+): Promise<RutaCalculada[] | null> {
   const res = await fetchConTimeout('https://api.openrouteservice.org/v2/directions/driving-hgv/geojson', {
     method: 'POST',
     headers: {
@@ -148,37 +156,49 @@ async function calcularRutaORS(
         [origen.lon, origen.lat],
         [destino.lon, destino.lat],
       ],
+      alternative_routes: {
+        target_count: 3,
+        share_factor: 0.6,
+        weight_factor: 1.6,
+      },
     }),
   }, 12000);
   if (!res || !res.ok) return null;
   const data = await res.json();
-  const feature = data.features?.[0];
-  if (!feature) return null;
+  const features = data.features;
+  if (!features?.length) return null;
 
-  const distanciaM: number = feature.properties.summary.distance;
-  const km = Math.round(distanciaM / 1000);
+  return features.map((feature: any) => {
+    const distanciaM: number = feature.properties.summary.distance;
+    const duracionS: number = feature.properties.summary.duration;
+    const km = Math.round(distanciaM / 1000);
+    const duracionMin = Math.round(duracionS / 60);
 
-  // GeoJSON coordinates vienen como [lon, lat] — invertir a [lat, lon] para Leaflet
-  const polyline: [number, number][] = feature.geometry.coordinates.map(
-    ([lon, lat]: [number, number]) => [lat, lon]
-  );
+    // GeoJSON coordinates vienen como [lon, lat] — invertir a [lat, lon] para Leaflet
+    const polyline: [number, number][] = feature.geometry.coordinates.map(
+      ([lon, lat]: [number, number]) => [lat, lon]
+    );
 
-  return { km, polyline };
+    return { km, polyline, duracionMin };
+  });
 }
 
-// OSRM — fallback gratuito sin key
+// OSRM — fallback gratuito sin key, con alternativas
 async function calcularRutaOSRM(
   origen: { lat: number; lon: number },
   destino: { lat: number; lon: number }
-): Promise<{ km: number; polyline: [number, number][] } | null> {
-  const url = `https://router.project-osrm.org/route/v1/driving/${origen.lon},${origen.lat};${destino.lon},${destino.lat}?overview=full&geometries=polyline`;
+): Promise<RutaCalculada[] | null> {
+  const url = `https://router.project-osrm.org/route/v1/driving/${origen.lon},${origen.lat};${destino.lon},${destino.lat}?overview=full&geometries=polyline&alternatives=3`;
   const res = await fetchConTimeout(url, { headers: { 'User-Agent': 'FletIA/1.0 (fletia@gmail.com)' } }, 12000);
   if (!res || !res.ok) return null;
   const data = await res.json();
   if (data.code !== 'Ok' || !data.routes?.length) return null;
-  const km = Math.round(data.routes[0].distance / 1000);
-  const polyline = decodificarPolyline(data.routes[0].geometry);
-  return { km, polyline };
+
+  return data.routes.map((route: any) => ({
+    km: Math.round(route.distance / 1000),
+    polyline: decodificarPolyline(route.geometry),
+    duracionMin: Math.round(route.duration / 60),
+  }));
 }
 
 export async function POST(request: Request) {
@@ -201,42 +221,59 @@ export async function POST(request: Request) {
     }
 
     const orsKey = process.env.ORS_API_KEY;
-    let resultado: { km: number; polyline: [number, number][] } | null = null;
+    let rutas: RutaCalculada[] | null = null;
     let motor = orsKey ? 'ors-hgv' : 'osrm';
 
     if (orsKey) {
-      resultado = await calcularRutaORS(coordOrigen, coordDestino, orsKey);
+      rutas = await calcularRutaORS(coordOrigen, coordDestino, orsKey);
     }
 
     // Fallback a OSRM si no hay key o si ORS falla
-    if (!resultado) {
-      resultado = await calcularRutaOSRM(coordOrigen, coordDestino);
-      if (resultado) motor = 'osrm';
+    if (!rutas) {
+      rutas = await calcularRutaOSRM(coordOrigen, coordDestino);
+      if (rutas) motor = 'osrm';
     }
 
     // Último recurso: estimación por línea recta × factor de ruta (1.25).
     // Garantiza un resultado funcional aunque los servicios de ruteo no respondan.
-    if (!resultado) {
+    if (!rutas) {
       const kmRecta = haversineKm(coordOrigen.lat, coordOrigen.lon, coordDestino.lat, coordDestino.lon);
       const km = Math.round(kmRecta * 1.25);
-      resultado = {
+      rutas = [{
         km,
         polyline: [
           [coordOrigen.lat, coordOrigen.lon],
           [coordDestino.lat, coordDestino.lon],
         ],
-      };
+      }];
       motor = 'estimado';
     }
 
-    const peajes = calcularPeajesEnRuta(resultado.polyline);
+    // Ruta principal (la más óptima)
+    const principal = rutas[0];
+    const peajes = calcularPeajesEnRuta(principal.polyline);
+
+    // Rutas alternativas con peajes pre-calculados
+    const rutasAlternativas = rutas.length > 1
+      ? rutas.slice(1).map(r => ({
+          km: r.km,
+          polyline: r.polyline,
+          duracionMin: r.duracionMin,
+          peajes: calcularPeajesEnRuta(r.polyline),
+        }))
+      : [];
+
     return NextResponse.json({
-      km: resultado.km,
-      polyline: resultado.polyline,
+      // Campos principales (retrocompatibles)
+      km: principal.km,
+      polyline: principal.polyline,
+      duracionMin: principal.duracionMin,
       origen: { lat: coordOrigen.lat, lon: coordOrigen.lon, nombre: coordOrigen.nombre },
       destino: { lat: coordDestino.lat, lon: coordDestino.lon, nombre: coordDestino.nombre },
       motor,
       peajes,
+      // Rutas alternativas (nuevo)
+      rutasAlternativas,
     });
 
   } catch {
