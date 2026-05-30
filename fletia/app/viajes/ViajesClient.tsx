@@ -119,7 +119,6 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     precio_combustible: '1200',
     flete_cobrado: '',
     peajes_total: '',
-    costo_operativo_km: '',
   });
 
   const iniciales = empresa.split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase() || 'TE';
@@ -403,24 +402,17 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     setConfirmado(false);
   }
 
-  // Peajes + costo operativo + costo total real
+  // Peajes + costo total real
   const peajesTotal = resultado && form.peajes_total ? (parseFloat(form.peajes_total) || 0) : 0;
   const costoConPeajes = resultado ? resultado.costoTotal + peajesTotal : 0;
 
-  // Costo operativo: chofer + mantenimiento + amortización + seguro, expresado por km.
-  // Es opcional y se estima al momento de cotizar para que el margen no quede inflado.
-  const operativoPorKm = resultado && form.costo_operativo_km ? (parseFloat(form.costo_operativo_km) || 0) : 0;
-  const kmViaje = parseFloat(form.kilometros) || 0;
-  const costoOperativo = Math.round(operativoPorKm * kmViaje);
-  const costoTotalViaje = costoConPeajes + costoOperativo;
-
-  // Calcular rentabilidad sobre el costo TOTAL (combustible + peajes + operativo)
+  // Calcular rentabilidad
   const margenNeto = resultado && form.flete_cobrado
-    ? (((parseFloat(form.flete_cobrado) - costoTotalViaje) / parseFloat(form.flete_cobrado)) * 100).toFixed(1)
+    ? (((parseFloat(form.flete_cobrado) - costoConPeajes) / parseFloat(form.flete_cobrado)) * 100).toFixed(1)
     : null;
 
   const gananciaNeta = resultado && form.flete_cobrado
-    ? parseFloat(form.flete_cobrado) - costoTotalViaje
+    ? parseFloat(form.flete_cobrado) - costoConPeajes
     : null;
 
   const colorMargen = margenNeto
@@ -1067,26 +1059,6 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       </div>
                     </div>
 
-                    {/* Costo operativo por km (chofer + mantenimiento + amortización + seguro) */}
-                    <div>
-                      <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>
-                        Costo operativo ($/km) <span style={{ color: '#8a8278' }}>opcional</span>
-                      </label>
-                      <input
-                        type="number"
-                        value={form.costo_operativo_km}
-                        onChange={e => setForm(p => ({ ...p, costo_operativo_km: e.target.value }))}
-                        placeholder="ej: 350"
-                        min={0}
-                        step={10}
-                        className="w-full px-3 py-2.5 text-sm outline-none"
-                        style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
-                      />
-                      <div className="mt-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278' }}>
-                        Chofer + mantenimiento + amortización + seguro, por km. Se suma al costo total para que el margen sea real.
-                      </div>
-                    </div>
-
                     {/* Precio combustible y flete */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -1171,30 +1143,18 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                           </div>
                         ))}
                       </div>
-                      {(peajesTotal > 0 || costoOperativo > 0) && (
+                      {peajesTotal > 0 && (
                         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
-                            {peajesTotal > 0 && (
-                              <>
-                                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>🚧 + Peajes</div>
-                                <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '22px', fontWeight: 700, color: '#ffa726', marginBottom: costoOperativo > 0 ? '6px' : '0' }}>
-                                  +${peajesTotal.toLocaleString('es-AR')}
-                                </div>
-                              </>
-                            )}
-                            {costoOperativo > 0 && (
-                              <>
-                                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>🛠️ + Operativo</div>
-                                <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '22px', fontWeight: 700, color: '#ffa726' }}>
-                                  +${costoOperativo.toLocaleString('es-AR')}
-                                </div>
-                              </>
-                            )}
+                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>🚧 + Peajes</div>
+                            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '22px', fontWeight: 700, color: '#ffa726' }}>
+                              +${peajesTotal.toLocaleString('es-AR')}
+                            </div>
                           </div>
                           <div style={{ textAlign: 'right' }}>
                             <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>Total estimado</div>
                             <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '28px', fontWeight: 900, color: '#fff' }}>
-                              ${costoTotalViaje.toLocaleString('es-AR')}
+                              ${costoConPeajes.toLocaleString('es-AR')}
                             </div>
                           </div>
                         </div>
@@ -1247,13 +1207,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '6px' }}>Rentabilidad del flete</div>
                         <div className="flex items-center justify-between">
                           <div className="text-sm" style={{ color: '#4a4540' }}>
-                            Flete: ${parseFloat(form.flete_cobrado).toLocaleString('es-AR')} · Costo: ${costoTotalViaje.toLocaleString('es-AR')}
-                            {(() => {
-                              const partes = ['comb.'];
-                              if (peajesTotal > 0) partes.push('peajes');
-                              if (costoOperativo > 0) partes.push('operativo');
-                              return partes.length > 1 ? ` (${partes.join('+')})` : '';
-                            })()}
+                            Flete: ${parseFloat(form.flete_cobrado).toLocaleString('es-AR')} · Costo: ${costoConPeajes.toLocaleString('es-AR')}{peajesTotal > 0 ? ' (comb.+peajes)' : ''}
                           </div>
                           <div style={{ textAlign: 'right' }}>
                             <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '1px', color: colorMargen, textTransform: 'uppercase', marginBottom: '2px' }}>{gananciaNeta! >= 0 ? 'Ganancia' : 'Pérdida'}</div>
@@ -1300,20 +1254,8 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                           ...(peajesTotal > 0 ? [{
                             label: 'Peajes en ruta',
                             val: `$${peajesTotal.toLocaleString('es-AR')}`,
-                            pct: Math.min((peajesTotal / costoTotalViaje) * 100, 100),
-                            desc: `Peajes detectados sobre la ruta`,
-                          }] : []),
-                          ...(costoOperativo > 0 ? [{
-                            label: 'Costo operativo',
-                            val: `$${costoOperativo.toLocaleString('es-AR')}`,
-                            pct: Math.min((costoOperativo / costoTotalViaje) * 100, 100),
-                            desc: `${operativoPorKm.toLocaleString('es-AR')} $/km × ${kmViaje.toLocaleString('es-AR')} km (chofer+mant.+amort.+seguro)`,
-                          }] : []),
-                          ...((peajesTotal > 0 || costoOperativo > 0) ? [{
-                            label: 'Costo total del viaje',
-                            val: `$${costoTotalViaje.toLocaleString('es-AR')}`,
-                            pct: 100,
-                            desc: `Combustible + peajes + operativo`,
+                            pct: Math.min((peajesTotal / costoConPeajes) * 100, 100),
+                            desc: `Total comb. + peajes: $${costoConPeajes.toLocaleString('es-AR')}`,
                           }] : []),
                         ].map(f => (
                           <div key={f.label}>
