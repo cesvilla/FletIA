@@ -109,7 +109,7 @@ export default function LoginPage() {
   </div>
 )}
           <div className="font-mono text-[10px] tracking-[3px] text-ink-3 mt-1 uppercase">
-            // combustible inteligente
+            // inteligencia para cada viaje
           </div>
         </div>
 
@@ -240,7 +240,7 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="text-center mt-6">
           <p className="font-mono text-[10px] text-ink-3 tracking-[1px]">
-            // combustible inteligente
+            // inteligencia para cada viaje
           </p>
         </div>
 

@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { getPreciosDeHoy } from '@/lib/precios';
 import DashboardClient from './DashboardClient';
 
 export default async function DashboardPage() {
@@ -16,19 +18,22 @@ export default async function DashboardPage() {
     { data: viajesTotal },
     { data: camiones },
     { data: recordatorios },
-    { data: precios },
+    preciosResult,
   ] = await Promise.all([
     supabase.from('viajes').select('costo_total, flete_cobrado').eq('user_id', user.id).gte('created_at', firstOfMonth),
     supabase.from('viajes').select('id').eq('user_id', user.id),
     supabase.from('camiones').select('id').eq('user_id', user.id).eq('activo', true),
     supabase.from('recordatorios').select('*').eq('user_id', user.id).eq('completado', false).order('fecha', { ascending: true }),
-    supabase.from('precio_combustible').select('*').order('fecha', { ascending: false }).order('empresa').limit(16),
+    // Precio de gasoil de hoy: promedio nacional real (Sec. de Energía), cacheado por día.
+    getPreciosDeHoy(createAdminClient()).catch(() => ({ precios: [], fuente: 'referencia' as const })),
   ]);
 
   const gastoMes = viajesMes?.reduce((acc, v) => acc + (v.costo_total || 0), 0) || 0;
   const gananciasMes = viajesMes?.reduce((acc, v) => acc + (v.flete_cobrado || 0), 0) || 0;
   const totalViajes = viajesTotal?.length || 0;
   const totalCamiones = camiones?.length || 0;
+  const precios = preciosResult.precios;
+  const preciosFuente = preciosResult.fuente;
 
   return (
     <DashboardClient
@@ -41,6 +46,7 @@ export default async function DashboardPage() {
       totalCamiones={totalCamiones}
       recordatorios={recordatorios || []}
       precios={precios || []}
+      preciosFuente={preciosFuente}
     />
   );
 }

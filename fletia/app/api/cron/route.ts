@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getPreciosDeHoy } from '@/lib/precios';
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -11,7 +12,7 @@ function emailUsuarioDemo(empresa: string, diasAviso: number, fechaFormateada: s
     <div style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto; background: #f0ede8; padding: 32px;">
       <div style="background: #1a1714; padding: 22px 28px; border-radius: 8px 8px 0 0;">
         <span style="font-size: 26px; font-weight: 900; color: #fff; letter-spacing: -0.5px;">Flet<span style="color: #d4440c;">IA</span></span>
-        <span style="font-size: 11px; color: rgba(255,255,255,0.35); margin-left: 10px; font-family: monospace; letter-spacing: 2px;">// combustible inteligente</span>
+        <span style="font-size: 11px; color: rgba(255,255,255,0.35); margin-left: 10px; font-family: monospace; letter-spacing: 2px;">// inteligencia para cada viaje</span>
       </div>
       <div style="background: #fff; padding: 32px 28px; border: 1px solid rgba(26,23,20,0.1); border-top: none; border-radius: 0 0 8px 8px;">
         <div style="font-size: 36px; margin-bottom: 16px;">🚛</div>
@@ -37,7 +38,7 @@ function emailUsuarioDemo(empresa: string, diasAviso: number, fechaFormateada: s
         </div>
       </div>
       <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #aaa; font-family: monospace; letter-spacing: 1px;">
-        FletIA — combustible inteligente &nbsp;·&nbsp; Respondé este mail para renovar
+        FletIA — inteligencia para cada viaje &nbsp;·&nbsp; Respondé este mail para renovar
       </div>
     </div>
   `;
@@ -48,7 +49,7 @@ function emailUsuarioCliente(empresa: string, diasAviso: number, fechaFormateada
     <div style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto; background: #f0ede8; padding: 32px;">
       <div style="background: #1a1714; padding: 22px 28px; border-radius: 8px 8px 0 0;">
         <span style="font-size: 26px; font-weight: 900; color: #fff; letter-spacing: -0.5px;">Flet<span style="color: #d4440c;">IA</span></span>
-        <span style="font-size: 11px; color: rgba(255,255,255,0.35); margin-left: 10px; font-family: monospace; letter-spacing: 2px;">// combustible inteligente</span>
+        <span style="font-size: 11px; color: rgba(255,255,255,0.35); margin-left: 10px; font-family: monospace; letter-spacing: 2px;">// inteligencia para cada viaje</span>
       </div>
       <div style="background: #fff; padding: 32px 28px; border: 1px solid rgba(26,23,20,0.1); border-top: none; border-radius: 0 0 8px 8px;">
         <div style="font-size: 36px; margin-bottom: 16px;">🔔</div>
@@ -74,7 +75,7 @@ function emailUsuarioCliente(empresa: string, diasAviso: number, fechaFormateada
         </div>
       </div>
       <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #aaa; font-family: monospace; letter-spacing: 1px;">
-        FletIA — combustible inteligente &nbsp;·&nbsp; Respondé este mail para renovar
+        FletIA — inteligencia para cada viaje &nbsp;·&nbsp; Respondé este mail para renovar
       </div>
     </div>
   `;
@@ -129,6 +130,16 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
 
+  // Refrescar el precio de gasoil del día (promedio nacional, Sec. de Energía).
+  // Best-effort: si falla, no interrumpe el envío de avisos de vencimiento.
+  let preciosFuente: string | null = null;
+  try {
+    const { fuente } = await getPreciosDeHoy(admin);
+    preciosFuente = fuente;
+  } catch {
+    preciosFuente = 'error';
+  }
+
   const hoy = new Date();
   const fechaLimiteMin = new Date(hoy);
   fechaLimiteMin.setDate(hoy.getDate() + DIAS_AVISO);
@@ -145,7 +156,7 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!proximos || proximos.length === 0) {
-    return NextResponse.json({ ok: true, enviados: 0, mensaje: 'Sin vencimientos próximos' });
+    return NextResponse.json({ ok: true, enviados: 0, precios: preciosFuente, mensaje: 'Sin vencimientos próximos' });
   }
 
   const enviados: string[] = [];
@@ -182,5 +193,5 @@ export async function GET(request: Request) {
     enviados.push(acceso.email);
   }
 
-  return NextResponse.json({ ok: true, enviados: enviados.length, usuarios: enviados });
+  return NextResponse.json({ ok: true, enviados: enviados.length, precios: preciosFuente, usuarios: enviados });
 }

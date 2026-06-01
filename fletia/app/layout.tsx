@@ -3,8 +3,8 @@ import './globals.css';
 import SupportChat from './components/SupportChat';
 
 export const metadata: Metadata = {
-  title: 'FletIA — Combustible inteligente para tu flota',
-  description: 'Calculá el costo exacto de combustible de cada viaje según peso, ruta y terreno. IA para empresas de logística argentinas.',
+  title: 'FletIA — Inteligencia para cada viaje de tu flota',
+  description: 'Calculá el costo real de cada flete antes de salir: combustible, peajes, ruta, clima y tráfico. IA que aprende el consumo de cada camión y te dice si el viaje es rentable. Para transportistas y flotas argentinas.',
 };
 
 export default function RootLayout({

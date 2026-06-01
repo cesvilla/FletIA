@@ -130,10 +130,13 @@ export async function POST(request: Request) {
     const resultados = await Promise.all(
       muestras.map(async ([lat, lon], idx) => {
         const esExtremo = idx === 0 || idx === muestras.length - 1;
-        // Origen/destino: usar nombre del geocodificador directamente si está disponible
-        const nombreFijo = esExtremo
+        // Origen/destino: usar nombre del geocodificador directamente si está disponible.
+        // Lo pasamos por corregirCiudad para arreglar nombres mal puestos (ej. el
+        // viejo "San Salvador de Tucumán" → "San Miguel de Tucumán").
+        const nombreFijoRaw = esExtremo
           ? (idx === 0 ? origenCoord?.nombre : destinoCoord?.nombre) || null
           : null;
+        const nombreFijo = nombreFijoRaw ? corregirCiudad(nombreFijoRaw) : null;
         const [climaRes, nombre] = await Promise.all([
           fetch(
             `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
@@ -178,16 +181,54 @@ export async function POST(request: Request) {
       })
     );
 
-    // Filtrar nulos y deduplicar por nombre (evitar "Jujuy, Jujuy, Jujuy")
+    // Filtrar nulos y deduplicar puntos de la misma zona.
+    // Dos cards de la misma ciudad aparecían cuando el nombre venía distinto
+    // (ej. "Tucumán" de un punto intermedio y "San Miguel de Tucumán" del destino).
+    // Deduplicamos por nombre normalizado Y por proximidad (<20 km = misma zona),
+    // dando prioridad a origen y destino (que nunca se descartan).
     const todosValidos = resultados.filter(Boolean) as NonNullable<typeof resultados[0]>[];
-    const vistos = new Set<string>();
-    const puntos = todosValidos.filter(p => {
-      // Normalizar nombre para comparar (quitar tildes, lowercase)
-      const clave = p.nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-      if (vistos.has(clave)) return false;
-      vistos.add(clave);
-      return true;
-    });
+
+    const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    const distKm = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => {
+      const R = 6371, toRad = (d: number) => (d * Math.PI) / 180;
+      const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+    };
+
+    const ultimoIdx = todosValidos.length - 1;
+    // Prioridad: origen y destino primero, luego intermedios en orden de ruta.
+    const ordenPrioridad = [
+      ...(todosValidos.length > 0 ? [0] : []),
+      ...(ultimoIdx > 0 ? [ultimoIdx] : []),
+      ...todosValidos.map((_, i) => i).filter(i => i !== 0 && i !== ultimoIdx),
+    ];
+
+    const MISMA_ZONA_KM = 30;
+    // ¿Son el mismo lugar? mismo nombre, muy cerca, o un nombre contiene al otro
+    // (ej. "Tucumán" ⊂ "San Miguel de Tucumán" = la provincia y su capital).
+    const mismoLugar = (a: { nombre: string; lat: number; lon: number }, b: { nombre: string; lat: number; lon: number }) => {
+      const na = norm(a.nombre), nb = norm(b.nombre);
+      if (na === nb) return true;
+      if (na.length >= 4 && nb.length >= 4 && (na.includes(nb) || nb.includes(na))) return true;
+      return distKm(a, b) < MISMA_ZONA_KM;
+    };
+
+    const elegidos: typeof todosValidos = [];
+    for (const i of ordenPrioridad) {
+      const p = todosValidos[i];
+      const dupIdx = elegidos.findIndex(k => mismoLugar(k, p));
+      if (dupIdx === -1) {
+        elegidos.push(p);
+      } else if (norm(p.nombre).length < norm(elegidos[dupIdx].nombre).length) {
+        // Misma zona ya presente: nos quedamos con el nombre más corto/general
+        // (la provincia "Tucumán" en vez de "San Miguel de Tucumán"),
+        // manteniendo el clima del punto que ya teníamos.
+        elegidos[dupIdx] = { ...elegidos[dupIdx], nombre: p.nombre };
+      }
+    }
+    // Reordenar para mostrar de origen a destino
+    const puntos = elegidos.sort((a, b) => todosValidos.indexOf(a) - todosValidos.indexOf(b));
 
     // Factor climático máximo de toda la ruta (el peor tramo manda)
     const factorMaximo = puntos.reduce((max, p) => Math.max(max, p.factorImpacto), 0);

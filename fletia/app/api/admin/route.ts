@@ -34,10 +34,12 @@ export async function GET() {
   const { data: accesosData } = await admin.from('accesos').select('*');
   const accesosMap = new Map((accesosData || []).map((a: any) => [a.user_id, a]));
 
-  // Combinar: si no tiene acceso en tabla, aparece como pendiente
+  // Combinar: si no tiene acceso en tabla, aparece como pendiente.
+  // El límite de camiones vive en user_metadata (lo setea el admin al aprobar).
   const accesos = users.map(u => {
     const acceso = accesosMap.get(u.id);
-    return acceso ?? {
+    const limite_camiones = Number(u.user_metadata?.limite_camiones ?? 1);
+    const base = acceso ?? {
       id: u.id,
       user_id: u.id,
       email: u.email,
@@ -49,6 +51,7 @@ export async function GET() {
       fecha_expiracion: null,
       created_at: u.created_at,
     };
+    return { ...base, limite_camiones };
   });
 
   // Ordenar por fecha de creación descendente
@@ -62,7 +65,7 @@ export async function POST(request: Request) {
   const admin_user = await verificarAdmin();
   if (!admin_user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-  const { user_id, dias, tipo } = await request.json();
+  const { user_id, dias, tipo, limite_camiones } = await request.json();
   if (!user_id || !dias) return NextResponse.json({ error: 'Faltan datos' }, { status: 400 });
 
   const fecha_expiracion = new Date();
@@ -73,6 +76,16 @@ export async function POST(request: Request) {
   const { data: authUser } = await admin.auth.admin.getUserById(user_id);
   const email = authUser?.user?.email || '';
   const empresa = authUser?.user?.user_metadata?.empresa || '';
+
+  // Guardar el límite de camiones autorizado en user_metadata (sin tocar el resto)
+  if (limite_camiones != null && !isNaN(Number(limite_camiones))) {
+    await admin.auth.admin.updateUserById(user_id, {
+      user_metadata: {
+        ...(authUser?.user?.user_metadata || {}),
+        limite_camiones: Math.max(0, Math.round(Number(limite_camiones))),
+      },
+    });
+  }
 
   // Upsert: crea la fila si no existe, actualiza si ya existe
   const { error } = await admin

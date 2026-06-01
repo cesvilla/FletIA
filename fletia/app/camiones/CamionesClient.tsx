@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Camion, NuevoCamion } from '@/lib/types';
+import Sidebar from '@/app/components/Sidebar';
 
 interface Props {
   camionesIniciales: Camion[];
@@ -243,53 +244,7 @@ export default function CamionesClient({ camionesIniciales, empresa, email }: Pr
   return (
     <div className="flex min-h-screen" style={{ backgroundColor: '#f0ede8' }}>
 
-      {sidebarOpen && (
-        <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-40 md:hidden" />
-      )}
-
-      {/* Sidebar */}
-      <aside className={`fixed top-0 left-0 h-screen w-56 flex flex-col z-50 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`} style={{ backgroundColor: '#1a1714' }}>
-        <div className="p-6 flex items-start justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          <div>
-            <div className="text-2xl font-black text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              Flet<span style={{ color: '#d4440c' }}>IA</span>
-            </div>
-            <div className="text-white/30 mt-1" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', letterSpacing: '2px' }}>
-              // combustible inteligente
-            </div>
-          </div>
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-white/40 hover:text-white text-xl">×</button>
-        </div>
-
-        <nav className="flex-1 py-4">
-          <div className="px-5 my-4 text-white/25 uppercase" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', letterSpacing: '2px' }}>Principal</div>
-          <a href="/dashboard" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
-            <span>⚡</span> Dashboard
-          </a>
-          <a href="/viajes" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
-            <span>🧮</span> Nuevo viaje
-          </a>
-          <div className="px-5 my-4 text-white/25 uppercase" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', letterSpacing: '2px' }}>Flota</div>
-          <a className="flex items-center gap-2 px-5 py-2.5 text-sm text-white font-medium" style={{ backgroundColor: 'rgba(212,68,12,0.15)', borderLeft: '2px solid #d4440c' }}>
-            <span>🚛</span> Mis camiones
-          </a>
-        </nav>
-
-        <div className="p-5" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0" style={{ backgroundColor: '#d4440c' }}>
-              {iniciales}
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-white/80 truncate">{empresa}</div>
-              <div className="text-white/30 truncate" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px' }}>{email}</div>
-            </div>
-          </div>
-          <button onClick={handleLogout} className="text-left text-white/40 hover:text-red-400 transition-colors" style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px' }}>
-            → Cerrar sesión
-          </button>
-        </div>
-      </aside>
+      <Sidebar active="camiones" empresa={empresa} email={email} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Main */}
       <main className="flex-1 md:ml-56">

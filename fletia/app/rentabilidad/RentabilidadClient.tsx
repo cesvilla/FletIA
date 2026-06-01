@@ -1,8 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import Sidebar from '@/app/components/Sidebar';
+
+const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function formatMes(ym: string) {
+  const [y, m] = ym.split('-');
+  return `${MESES_ES[parseInt(m) - 1]} ${y}`;
+}
 
 interface Viaje {
   id: string;
@@ -29,6 +36,7 @@ export default function RentabilidadClient({ viajes, empresa, email }: Props) {
   const router = useRouter();
   const supabase = createClient();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mesSeleccionado, setMesSeleccionado] = useState('');
 
   const iniciales = empresa.split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase() || 'TE';
 
@@ -38,57 +46,33 @@ export default function RentabilidadClient({ viajes, empresa, email }: Props) {
     router.refresh();
   }
 
-  // Costo real del viaje = combustible + peajes (los peajes ya están guardados por viaje)
+  // Meses con movimientos (todos, no solo el actual), del más reciente al más viejo
+  const mesesDisponibles = useMemo(() => {
+    const set = new Set(viajes.map(v => v.created_at.substring(0, 7)));
+    return Array.from(set).sort().reverse();
+  }, [viajes]);
+
+  // Viajes del mes elegido (o todos)
+  const viajesMes = useMemo(
+    () => mesSeleccionado ? viajes.filter(v => v.created_at.startsWith(mesSeleccionado)) : viajes,
+    [viajes, mesSeleccionado],
+  );
+
+  // Costo real del viaje = combustible + operativos (en costo_total) + peajes
   const costoReal = (v: Viaje) => v.costo_total + (v.peajes_total ?? 0);
 
-  const totalFlete = viajes.reduce((a, v) => a + v.flete_cobrado, 0);
-  const totalCosto = viajes.reduce((a, v) => a + costoReal(v), 0);
+  const totalFlete = viajesMes.reduce((a, v) => a + v.flete_cobrado, 0);
+  const totalCosto = viajesMes.reduce((a, v) => a + costoReal(v), 0);
   const totalGanancia = totalFlete - totalCosto;
   const margenPromedio = totalFlete > 0 ? ((totalGanancia / totalFlete) * 100) : 0;
 
-  const viajesRentables = viajes.filter(v => v.flete_cobrado > costoReal(v)).length;
-  const viajesNegativos = viajes.length - viajesRentables;
+  const viajesRentables = viajesMes.filter(v => v.flete_cobrado > costoReal(v)).length;
+  const viajesNegativos = viajesMes.length - viajesRentables;
 
   return (
     <div className="flex min-h-screen" style={{ backgroundColor: '#f0ede8' }}>
 
-      {sidebarOpen && (
-        <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-40 md:hidden" />
-      )}
-
-      <aside className={`fixed top-0 left-0 h-screen w-56 flex flex-col z-50 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`} style={{ backgroundColor: '#1a1714' }}>
-        <div className="p-6 flex items-start justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          <div>
-            <div className="text-2xl font-black text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              Flet<span style={{ color: '#d4440c' }}>IA</span>
-            </div>
-            <div className="text-white/30 mt-1" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', letterSpacing: '2px' }}>
-              // combustible inteligente
-            </div>
-          </div>
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-white/40 hover:text-white text-xl">×</button>
-        </div>
-
-        <nav className="flex-1 py-4">
-          <div className="px-5 my-4 text-white/25 uppercase" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', letterSpacing: '2px' }}>Principal</div>
-          <a href="/dashboard" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors"><span>⚡</span> Dashboard</a>
-          <a href="/viajes" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors"><span>🧮</span> Calculadora</a>
-          <a href="/camiones" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors"><span>🚛</span> Mis camiones</a>
-          <div className="px-5 my-4 text-white/25 uppercase" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', letterSpacing: '2px' }}>Análisis</div>
-          <a className="flex items-center gap-2 px-5 py-2.5 text-sm text-white font-medium" style={{ backgroundColor: 'rgba(212,68,12,0.15)', borderLeft: '2px solid #d4440c' }}><span>💰</span> Rentabilidad</a>
-        </nav>
-
-        <div className="p-5" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0" style={{ backgroundColor: '#d4440c' }}>{iniciales}</div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-white/80 truncate">{empresa}</div>
-              <div className="text-white/30 truncate" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px' }}>{email}</div>
-            </div>
-          </div>
-          <button onClick={handleLogout} className="text-left text-white/40 hover:text-red-400 transition-colors" style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px' }}>→ Cerrar sesión</button>
-        </div>
-      </aside>
+      <Sidebar active="rentabilidad" empresa={empresa} email={email} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <main className="flex-1 md:ml-56">
         <div className="px-4 md:px-7 h-14 flex items-center justify-between sticky top-0 z-30 bg-white" style={{ borderBottom: '1px solid rgba(26,23,20,0.1)' }}>
@@ -103,6 +87,25 @@ export default function RentabilidadClient({ viajes, empresa, email }: Props) {
         </div>
 
         <div className="p-4 md:p-7">
+
+          {/* Selector de período — todos los meses con movimientos */}
+          {viajes.length > 0 && (
+            <div className="flex items-center gap-3 mb-5 flex-wrap">
+              <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '1px' }}>Período:</span>
+              <select
+                value={mesSeleccionado}
+                onChange={e => setMesSeleccionado(e.target.value)}
+                className="bg-white outline-none"
+                style={{ border: '1px solid rgba(26,23,20,0.2)', fontFamily: 'DM Mono, monospace', fontSize: '12px', padding: '8px 12px' }}
+              >
+                <option value="">Todos los meses ({viajes.length})</option>
+                {mesesDisponibles.map(m => {
+                  const n = viajes.filter(v => v.created_at.startsWith(m)).length;
+                  return <option key={m} value={m}>{formatMes(m)} ({n})</option>;
+                })}
+              </select>
+            </div>
+          )}
 
           {viajes.length === 0 && (
             <div className="bg-white border border-dashed border-gray-200 p-12 text-center">
@@ -148,12 +151,12 @@ export default function RentabilidadClient({ viajes, empresa, email }: Props) {
                   <div className="text-sm font-bold">Detalle por viaje</div>
                 </div>
                 <div>
-                  {viajes.map((v, i) => {
+                  {viajesMes.map((v, i) => {
                     const ganancia = v.flete_cobrado - costoReal(v);
                     const margen = ((ganancia / v.flete_cobrado) * 100).toFixed(1);
                     const rentable = ganancia >= 0;
                     return (
-                      <div key={v.id} className="flex items-center gap-2 md:gap-4 px-4 py-3 md:px-6 md:py-4" style={{ borderBottom: i < viajes.length - 1 ? '1px solid rgba(26,23,20,0.08)' : 'none' }}>
+                      <div key={v.id} className="flex items-center gap-2 md:gap-4 px-4 py-3 md:px-6 md:py-4" style={{ borderBottom: i < viajesMes.length - 1 ? '1px solid rgba(26,23,20,0.08)' : 'none' }}>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-semibold">
                             {v.origen && v.destino ? `${v.origen} → ${v.destino}` : `${v.kilometros} km`}

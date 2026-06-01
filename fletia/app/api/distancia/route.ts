@@ -26,8 +26,8 @@ async function fetchConTimeout(
 // Nominatim a veces devuelve la provincia en lugar de la capital, lo que genera
 // rutas erróneas. Este diccionario garantiza las coordenadas correctas.
 const CIUDADES_AR: Record<string, { lat: number; lon: number; nombre: string }> = {
-  'tucuman':                           { lat: -26.8241, lon: -65.2226, nombre: 'San Salvador de Tucumán' },
-  'san salvador de tucuman':           { lat: -26.8241, lon: -65.2226, nombre: 'San Salvador de Tucumán' },
+  'tucuman':                           { lat: -26.8241, lon: -65.2226, nombre: 'San Miguel de Tucumán' },
+  'san salvador de tucuman':           { lat: -26.8241, lon: -65.2226, nombre: 'San Miguel de Tucumán' },
   'jujuy':                             { lat: -24.1858, lon: -65.2995, nombre: 'San Salvador de Jujuy' },
   'san salvador de jujuy':             { lat: -24.1858, lon: -65.2995, nombre: 'San Salvador de Jujuy' },
   'salta':                             { lat: -24.7821, lon: -65.4232, nombre: 'Salta' },
@@ -65,7 +65,7 @@ const CIUDADES_AR: Record<string, { lat: number; lon: number; nombre: string }> 
   'concordia':                         { lat: -31.3928, lon: -58.0204, nombre: 'Concordia' },
   'bahia blanca':                      { lat: -38.7183, lon: -62.2661, nombre: 'Bahía Blanca' },
   'bahía blanca':                      { lat: -38.7183, lon: -62.2661, nombre: 'Bahía Blanca' },
-  'san miguel de tucuman':             { lat: -26.8241, lon: -65.2226, nombre: 'San Salvador de Tucumán' },
+  'san miguel de tucuman':             { lat: -26.8241, lon: -65.2226, nombre: 'San Miguel de Tucumán' },
   'villa maria':                       { lat: -32.4072, lon: -63.2397, nombre: 'Villa María' },
   'villa maría':                       { lat: -32.4072, lon: -63.2397, nombre: 'Villa María' },
   'rio cuarto':                        { lat: -33.1307, lon: -64.3499, nombre: 'Río Cuarto' },

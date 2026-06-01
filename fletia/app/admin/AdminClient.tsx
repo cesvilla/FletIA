@@ -9,6 +9,7 @@ interface Acceso {
   aprobado: boolean;
   dias_demo: number;
   tipo: string;
+  limite_camiones?: number;
   fecha_aprobacion: string | null;
   fecha_expiracion: string | null;
   created_at: string;
@@ -19,6 +20,7 @@ export default function AdminClient() {
   const [loading, setLoading] = useState(true);
   const [dias, setDias] = useState<Record<string, string>>({});
   const [tipos, setTipos] = useState<Record<string, string>>({});
+  const [limites, setLimites] = useState<Record<string, string>>({});
   const [procesando, setProcesando] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<{ texto: string; tipo: 'ok' | 'error' } | null>(null);
 
@@ -39,15 +41,17 @@ export default function AdminClient() {
   async function aprobar(user_id: string) {
     const d = dias[user_id] || '15';
     const t = tipos[user_id] || 'demo';
+    const acc = accesos.find(a => a.user_id === user_id);
+    const lim = limites[user_id] ?? String(acc?.limite_camiones ?? 1);
     setProcesando(user_id);
     const res = await fetch('/api/admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id, dias: parseInt(d), tipo: t }),
+      body: JSON.stringify({ user_id, dias: parseInt(d), tipo: t, limite_camiones: parseInt(lim) }),
     });
     const data = await res.json();
     if (data.ok) {
-      setMensaje({ texto: `✓ Aprobado por ${d} días`, tipo: 'ok' });
+      setMensaje({ texto: `✓ Aprobado por ${d} días · ${lim} camión(es)`, tipo: 'ok' });
       cargar();
     } else {
       setMensaje({ texto: `Error: ${data.error}`, tipo: 'error' });
@@ -173,6 +177,14 @@ export default function AdminClient() {
                         style={{ width: 64, padding: '6px 8px', border: '1px solid rgba(26,23,20,0.2)', backgroundColor: '#f0ede8', fontFamily: 'DM Mono, monospace', fontSize: 12, textAlign: 'center', outline: 'none' }}
                       />
                       <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#8a8278' }}>días</span>
+                      <input
+                        type="number" min={0} max={999}
+                        value={limites[a.user_id] ?? String(a.limite_camiones ?? 1)}
+                        onChange={e => setLimites(p => ({ ...p, [a.user_id]: e.target.value }))}
+                        title="Camiones autorizados"
+                        style={{ width: 56, padding: '6px 8px', border: '1px solid rgba(26,23,20,0.2)', backgroundColor: '#f0ede8', fontFamily: 'DM Mono, monospace', fontSize: 12, textAlign: 'center', outline: 'none' }}
+                      />
+                      <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#8a8278' }}>🚛</span>
                       <button
                         onClick={() => aprobar(a.user_id)}
                         disabled={procesando === a.user_id}
@@ -204,6 +216,9 @@ export default function AdminClient() {
                         <span style={{ padding: '1px 7px', borderRadius: 3, fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono, monospace', backgroundColor: a.tipo === 'cliente' ? 'rgba(26,107,58,0.1)' : 'rgba(200,134,10,0.1)', color: a.tipo === 'cliente' ? '#1a6b3a' : '#c8860a' }}>
                           {a.tipo === 'cliente' ? '⭐ cliente' : '🧪 demo'}
                         </span>
+                        <span style={{ padding: '1px 7px', borderRadius: 3, fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono, monospace', backgroundColor: 'rgba(26,23,20,0.06)', color: '#4a4540' }}>
+                          🚛 {a.limite_camiones ?? 1} {(a.limite_camiones ?? 1) === 1 ? 'camión' : 'camiones'}
+                        </span>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -226,14 +241,24 @@ export default function AdminClient() {
                           type="number" min={1} max={365}
                           value={dias[a.user_id] ?? '30'}
                           onChange={e => setDias(p => ({ ...p, [a.user_id]: e.target.value }))}
+                          title="Días a agregar"
                           style={{ width: 54, padding: '5px 6px', border: '1px solid rgba(26,23,20,0.2)', backgroundColor: '#f0ede8', fontFamily: 'DM Mono, monospace', fontSize: 11, textAlign: 'center', outline: 'none' }}
                         />
+                        <input
+                          type="number" min={0} max={999}
+                          value={limites[a.user_id] ?? String(a.limite_camiones ?? 1)}
+                          onChange={e => setLimites(p => ({ ...p, [a.user_id]: e.target.value }))}
+                          title="Camiones autorizados"
+                          style={{ width: 48, padding: '5px 6px', border: '1px solid rgba(26,23,20,0.2)', backgroundColor: '#f0ede8', fontFamily: 'DM Mono, monospace', fontSize: 11, textAlign: 'center', outline: 'none' }}
+                        />
+                        <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#8a8278' }}>🚛</span>
                         <button
                           onClick={() => aprobar(a.user_id)}
                           disabled={procesando === a.user_id}
+                          title="Guardar días y camiones"
                           style={{ padding: '6px 12px', backgroundColor: '#1a6b3a', color: '#fff', border: 'none', fontFamily: 'DM Mono, monospace', fontSize: 10, cursor: 'pointer', opacity: procesando === a.user_id ? 0.5 : 1 }}
                         >
-                          +días
+                          Guardar
                         </button>
                         <button
                           onClick={() => revocar(a.user_id)}

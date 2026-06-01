@@ -4,6 +4,7 @@ import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import dynamic from 'next/dynamic';
+import Sidebar from '@/app/components/Sidebar';
 
 const MapaRuta = dynamic(() => import('./MapaRuta'), { ssr: false, loading: () => (
   <div style={{ height: 300, backgroundColor: '#e8e3db', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -49,14 +50,22 @@ interface ResultadoIA {
   descripcion: string;
 }
 
+interface PrecioGasoil {
+  empresa: string;   // YPF, Shell, Axion, Puma
+  tipo: string;      // 'Gasoil Común' | 'Gasoil Premium'
+  precio: number;
+  fecha: string;
+}
+
 interface Props {
   camiones: Camion[];
   viajesIniciales: Viaje[];
   empresa: string;
   email: string;
+  precios?: PrecioGasoil[];
 }
 
-export default function ViajesClient({ camiones, viajesIniciales, empresa, email }: Props) {
+export default function ViajesClient({ camiones, viajesIniciales, empresa, email, precios = [] }: Props) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -126,7 +135,21 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     precio_combustible: '1200',
     flete_cobrado: '',
     peajes_total: '',
+    costo_conductor: '',       // $ por viaje (sueldo/viáticos del chofer)
+    costo_mantenimiento: '',   // $ por viaje (neumáticos, service, aceite, repuestos)
   });
+  // Margen objetivo para el precio mínimo de flete sugerido
+  const [margenObjetivo, setMargenObjetivo] = useState(20);
+  // Mostrar/ocultar los inputs de costos operativos
+  const [mostrarCostosOp, setMostrarCostosOp] = useState(false);
+  // Selector de precio de gasoil por estación de servicio
+  const [tipoGasoil, setTipoGasoil] = useState<'Gasoil Común' | 'Gasoil Premium'>('Gasoil Común');
+  const [estacionSel, setEstacionSel] = useState<string | null>(null);
+  // Precios del tipo elegido, en orden YPF → Shell → Axion → Puma
+  const ordenEstaciones = ['YPF', 'Shell', 'Axion', 'Puma'];
+  const preciosDelTipo = precios
+    .filter(p => p.tipo === tipoGasoil)
+    .sort((a, b) => ordenEstaciones.indexOf(a.empresa) - ordenEstaciones.indexOf(b.empresa));
 
   const iniciales = empresa.split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase() || 'TE';
 
@@ -384,10 +407,18 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     if (!resultado) return;
     setConfirmando(true);
     try {
+      // Costos operativos del viaje (conductor + mantenimiento) se suman al
+      // costo_total guardado. Los peajes van aparte (columna peajes_total), así
+      // el historial y la rentabilidad muestran el costo real, no solo combustible.
+      const operativos =
+        (form.costo_conductor ? parseFloat(form.costo_conductor) || 0 : 0) +
+        (form.costo_mantenimiento ? parseFloat(form.costo_mantenimiento) || 0 : 0);
+      const costoTotalGuardado = Math.round(resultado.costoTotal + operativos);
+
       const res = await fetch('/api/viajes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, resultado, kilometros: parseFloat(form.kilometros), peso_carga: parseFloat(form.peso_carga), precio_combustible: parseFloat(form.precio_combustible), flete_cobrado: form.flete_cobrado ? parseFloat(form.flete_cobrado) : null, peajes_total: form.peajes_total ? Math.round(parseFloat(form.peajes_total)) : 0 }),
+        body: JSON.stringify({ ...form, resultado, costo_total: costoTotalGuardado, kilometros: parseFloat(form.kilometros), peso_carga: parseFloat(form.peso_carga), precio_combustible: parseFloat(form.precio_combustible), flete_cobrado: form.flete_cobrado ? parseFloat(form.flete_cobrado) : null, peajes_total: form.peajes_total ? Math.round(parseFloat(form.peajes_total)) : 0 }),
       });
       const data = await res.json();
       if (data.error) { alert('Error al guardar: ' + data.error); return; }
@@ -443,17 +474,40 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     setConfirmado(false);
   }
 
-  // Peajes + costo total real
-  const peajesTotal = resultado && form.peajes_total ? (parseFloat(form.peajes_total) || 0) : 0;
-  const costoConPeajes = resultado ? resultado.costoTotal + peajesTotal : 0;
+  // ─── Costo TOTAL REAL del viaje ──────────────────────────────────────────────
+  // No es solo combustible: sumamos los peajes y los costos operativos (conductor
+  // + mantenimiento) que el transportista ya paga aunque no los vea. El clima NO
+  // se suma al costo porque su impacto es incierto — queda solo como referencia
+  // informativa en las tarjetas de clima.
 
-  // Calcular rentabilidad
+  const peajesTotal = resultado && form.peajes_total ? (parseFloat(form.peajes_total) || 0) : 0;
+
+  // Costos operativos opcionales (montos por viaje)
+  const costoConductor = resultado && form.costo_conductor ? (parseFloat(form.costo_conductor) || 0) : 0;
+  const costoMantenimiento = resultado && form.costo_mantenimiento
+    ? Math.round(parseFloat(form.costo_mantenimiento) || 0)
+    : 0;
+
+  const costoTotalReal = resultado
+    ? resultado.costoTotal + peajesTotal + costoConductor + costoMantenimiento
+    : 0;
+  // Compatibilidad: nombre viejo usado en el desglose (= combustible + peajes)
+  const costoConPeajes = resultado ? resultado.costoTotal + peajesTotal : 0;
+  // ¿Hay costos más allá del combustible? (para mostrar el desglose completo)
+  const hayCostosExtra = peajesTotal > 0 || costoConductor > 0 || costoMantenimiento > 0;
+
+  // Precio mínimo de flete para alcanzar el margen objetivo
+  const precioMinimo = costoTotalReal > 0
+    ? Math.round(costoTotalReal / (1 - margenObjetivo / 100))
+    : 0;
+
+  // Rentabilidad real (flete vs costo total real)
   const margenNeto = resultado && form.flete_cobrado
-    ? (((parseFloat(form.flete_cobrado) - costoConPeajes) / parseFloat(form.flete_cobrado)) * 100).toFixed(1)
+    ? (((parseFloat(form.flete_cobrado) - costoTotalReal) / parseFloat(form.flete_cobrado)) * 100).toFixed(1)
     : null;
 
   const gananciaNeta = resultado && form.flete_cobrado
-    ? parseFloat(form.flete_cobrado) - costoConPeajes
+    ? parseFloat(form.flete_cobrado) - costoTotalReal
     : null;
 
   const colorMargen = margenNeto
@@ -802,65 +856,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
       </div>
     )}
 
-      {sidebarOpen && (
-        <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-40 md:hidden" />
-      )}
-
-      {/* Sidebar */}
-      <aside className={`fixed top-0 left-0 h-screen w-56 flex flex-col z-50 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`} style={{ backgroundColor: '#1a1714' }}>
-        <div className="p-6 flex items-start justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          <div>
-            <div className="text-2xl font-black text-white" style={{ fontFamily: 'Barlow Condensed, sans-serif' }}>
-              Flet<span style={{ color: '#d4440c' }}>IA</span>
-            </div>
-            <div className="text-white/30 mt-1" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', letterSpacing: '2px' }}>
-              // combustible inteligente
-            </div>
-          </div>
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-white/40 hover:text-white text-xl">×</button>
-        </div>
-
-        <nav className="flex-1 py-4">
-          <div className="px-5 my-4 text-white/25 uppercase" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', letterSpacing: '2px' }}>Principal</div>
-          <a href="/dashboard" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
-            <span>⚡</span> Dashboard
-          </a>
-          <a className="flex items-center gap-2 px-5 py-2.5 text-sm text-white font-medium" style={{ backgroundColor: 'rgba(212,68,12,0.15)', borderLeft: '2px solid #d4440c' }}>
-            <span>🧮</span> Calculadora
-          </a>
-          <a href="/historial" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
-            <span>📋</span> Historial
-          </a>
-          <div className="px-5 my-4 text-white/25 uppercase" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', letterSpacing: '2px' }}>Flota</div>
-          <a href="/camiones" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
-            <span>🚛</span> Mis camiones
-          </a>
-          <div className="px-5 my-4 text-white/25 uppercase" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', letterSpacing: '2px' }}>Análisis</div>
-          <a href="/rentabilidad" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
-            <span>💰</span> Rentabilidad
-          </a>
-          {email === process.env.NEXT_PUBLIC_ADMIN_EMAIL && (
-            <a href="/admin" className="flex items-center gap-2 px-5 py-2.5 text-sm text-white/40 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors">
-              <span>🔑</span> Admin
-            </a>
-          )}
-        </nav>
-
-        <div className="p-5" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0" style={{ backgroundColor: '#d4440c' }}>
-              {iniciales}
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-white/80 truncate">{empresa}</div>
-              <div className="text-white/30 truncate" style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px' }}>{email}</div>
-            </div>
-          </div>
-          <button onClick={handleLogout} className="text-left text-white/40 hover:text-red-400 transition-colors" style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px' }}>
-            → Cerrar sesión
-          </button>
-        </div>
-      </aside>
+      <Sidebar active="viajes" empresa={empresa} email={email} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Main */}
       <main className="flex-1 md:ml-56">
@@ -1001,7 +997,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         {/* Selector de rutas alternativas */}
                         {rutasAlternativas.length > 0 && (
                           <div style={{ padding: '8px 12px', backgroundColor: '#f7f5f2', borderTop: '1px solid rgba(26,23,20,0.1)', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                            <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '1px', marginRight: '4px' }}>Rutas:</span>
+                            <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '1px', marginRight: '4px' }}>Ruta (km · tiempo · peajes):</span>
                             {/* Ruta actual (seleccionada) */}
                             <div style={{
                               padding: '5px 10px', fontSize: '11px', fontWeight: 700, fontFamily: 'DM Mono, monospace',
@@ -1135,6 +1131,55 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       </div>
                     </div>
 
+                    {/* Selector de precio de gasoil por estación de servicio (precio del día) */}
+                    {preciosDelTipo.length > 0 && (
+                      <div style={{ border: '1px solid rgba(26,23,20,0.12)', padding: '10px 12px', backgroundColor: '#f7f5f2' }}>
+                        <div className="flex items-center justify-between" style={{ marginBottom: '8px' }}>
+                          <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                            ⛽ Precio del día — elegí estación
+                          </span>
+                          <div className="flex gap-1">
+                            {(['Gasoil Común', 'Gasoil Premium'] as const).map(t => (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() => { setTipoGasoil(t); setEstacionSel(null); }}
+                                style={{
+                                  fontFamily: 'DM Mono, monospace', fontSize: '9px', padding: '3px 7px', cursor: 'pointer',
+                                  border: '1px solid', borderColor: tipoGasoil === t ? '#d4440c' : 'rgba(26,23,20,0.2)',
+                                  backgroundColor: tipoGasoil === t ? '#d4440c' : 'transparent',
+                                  color: tipoGasoil === t ? '#fff' : '#8a8278',
+                                }}
+                              >{t === 'Gasoil Común' ? 'Común' : 'Premium'}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {preciosDelTipo.map(p => {
+                            const sel = estacionSel === p.empresa;
+                            return (
+                              <button
+                                key={p.empresa}
+                                type="button"
+                                onClick={() => { setForm(f => ({ ...f, precio_combustible: String(p.precio) })); setEstacionSel(p.empresa); }}
+                                style={{
+                                  padding: '7px 4px', cursor: 'pointer', textAlign: 'center',
+                                  border: '1px solid', borderColor: sel ? '#d4440c' : 'rgba(26,23,20,0.15)',
+                                  backgroundColor: sel ? 'rgba(212,68,12,0.08)' : '#fff',
+                                }}
+                              >
+                                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: sel ? '#d4440c' : '#1a1714', fontWeight: 700, textTransform: 'uppercase' }}>{p.empresa}</div>
+                                <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '16px', fontWeight: 800, color: sel ? '#d4440c' : '#4a4540', lineHeight: 1.1 }}>${p.precio.toLocaleString('es-AR')}</div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', color: '#8a8278', marginTop: '7px' }}>
+                          Promedio nacional (Sec. de Energía). Podés ajustar el valor manualmente abajo.
+                        </div>
+                      </div>
+                    )}
+
                     {/* Precio combustible y flete */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -1142,7 +1187,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         <input
                           type="number"
                           value={form.precio_combustible}
-                          onChange={e => setForm(p => ({ ...p, precio_combustible: e.target.value }))}
+                          onChange={e => { setForm(p => ({ ...p, precio_combustible: e.target.value })); setEstacionSel(null); }}
                           required min={1}
                           className="w-full px-3 py-2.5 text-sm font-medium outline-none"
                           style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
@@ -1160,6 +1205,52 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                           style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
                         />
                       </div>
+                    </div>
+
+                    {/* Costos operativos (opcional) — para un costo total más real */}
+                    <div style={{ border: '1px solid rgba(26,23,20,0.12)' }}>
+                      <button
+                        type="button"
+                        onClick={() => setMostrarCostosOp(v => !v)}
+                        className="w-full flex items-center justify-between px-3 py-2.5"
+                        style={{ backgroundColor: '#f0ede8' }}
+                      >
+                        <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                          🧾 Costos operativos <span style={{ color: '#8a8278' }}>opcional</span>
+                        </span>
+                        <span style={{ color: '#8a8278', fontSize: '12px' }}>{mostrarCostosOp ? '▲' : '▼'}</span>
+                      </button>
+                      {mostrarCostosOp && (
+                        <div className="grid grid-cols-2 gap-3 p-3">
+                          <div>
+                            <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>Conductor / viáticos ($)</label>
+                            <input
+                              type="number"
+                              value={form.costo_conductor}
+                              onChange={e => setForm(p => ({ ...p, costo_conductor: e.target.value }))}
+                              placeholder="Por este viaje"
+                              min={0}
+                              className="w-full px-3 py-2.5 text-sm outline-none"
+                              style={{ backgroundColor: '#fff', border: '1px solid rgba(26,23,20,0.2)' }}
+                            />
+                          </div>
+                          <div>
+                            <label className="block mb-1.5" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>Mantenimiento ($)</label>
+                            <input
+                              type="number"
+                              value={form.costo_mantenimiento}
+                              onChange={e => setForm(p => ({ ...p, costo_mantenimiento: e.target.value }))}
+                              placeholder="Por este viaje"
+                              min={0}
+                              className="w-full px-3 py-2.5 text-sm outline-none"
+                              style={{ backgroundColor: '#fff', border: '1px solid rgba(26,23,20,0.2)' }}
+                            />
+                          </div>
+                          <div className="col-span-2" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', lineHeight: 1.5 }}>
+                            Estos costos se suman al combustible y peajes para mostrarte el costo total real y el margen verdadero del flete.
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {error && (
@@ -1228,13 +1319,93 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                             </div>
                           </div>
                           <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>Total estimado</div>
+                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>Comb. + peajes</div>
                             <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '28px', fontWeight: 900, color: '#fff' }}>
                               ${costoConPeajes.toLocaleString('es-AR')}
                             </div>
                           </div>
                         </div>
                       )}
+                    </div>
+
+                    {/* Costo total real — combustible + clima + peajes + operativos */}
+                    {hayCostosExtra && (
+                      <div className="bg-white border" style={{ borderColor: 'rgba(26,23,20,0.15)' }}>
+                        <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(26,23,20,0.08)' }}>
+                          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px' }}>💰 Costo total real del viaje</div>
+                        </div>
+                        <div style={{ padding: '8px 16px 12px' }}>
+                          {[
+                            { lab: 'Combustible', val: resultado.costoTotal, show: true, hint: '' },
+                            { lab: 'Peajes', val: peajesTotal, show: peajesTotal > 0, hint: '' },
+                            { lab: 'Conductor / viáticos', val: costoConductor, show: costoConductor > 0, hint: '' },
+                            { lab: 'Mantenimiento', val: costoMantenimiento, show: costoMantenimiento > 0, hint: '' },
+                          ].filter(r => r.show).map(r => (
+                            <div key={r.lab} className="flex justify-between items-baseline" style={{ padding: '5px 0' }}>
+                              <span style={{ fontSize: '13px', color: '#4a4540' }}>
+                                {r.lab}
+                                {r.hint && <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', marginLeft: '6px' }}>{r.hint}</span>}
+                              </span>
+                              <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '16px', fontWeight: 700, color: '#1a1714' }}>${r.val.toLocaleString('es-AR')}</span>
+                            </div>
+                          ))}
+                          <div className="flex justify-between items-baseline" style={{ padding: '10px 0 2px', borderTop: '1px solid rgba(26,23,20,0.1)', marginTop: '4px' }}>
+                            <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: '#1a1714', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>Costo total real</span>
+                            <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '30px', fontWeight: 900, color: '#d4440c', lineHeight: 1 }}>${costoTotalReal.toLocaleString('es-AR')}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Precio mínimo de flete sugerido */}
+                    <div style={{ backgroundColor: '#1a1714' }}>
+                      <div style={{ padding: '12px 16px' }}>
+                        <div className="flex items-center justify-between" style={{ marginBottom: '6px' }}>
+                          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '2px' }}>🎯 Precio mínimo de flete</div>
+                          <div className="flex gap-1">
+                            {[0, 15, 20, 25, 30].map(m => (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() => setMargenObjetivo(m)}
+                                style={{
+                                  fontFamily: 'DM Mono, monospace', fontSize: '10px', padding: '3px 7px', cursor: 'pointer',
+                                  border: '1px solid', borderColor: margenObjetivo === m ? '#d4440c' : 'rgba(255,255,255,0.2)',
+                                  backgroundColor: margenObjetivo === m ? '#d4440c' : 'transparent',
+                                  color: margenObjetivo === m ? '#fff' : 'rgba(255,255,255,0.6)',
+                                }}
+                              >{m}%</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '44px', fontWeight: 900, color: '#fff', lineHeight: 1 }}>
+                          ${precioMinimo.toLocaleString('es-AR')}
+                        </div>
+                        <div style={{ display: 'flex', gap: '20px', marginTop: '10px', alignItems: 'baseline' }}>
+                          <div>
+                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>Ganás a ese precio</div>
+                            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '26px', fontWeight: 800, color: '#4ade80', lineHeight: 1 }}>
+                              +${(precioMinimo - costoTotalReal).toLocaleString('es-AR')}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>Costo real</div>
+                            <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '26px', fontWeight: 800, color: 'rgba(255,255,255,0.85)', lineHeight: 1 }}>
+                              ${costoTotalReal.toLocaleString('es-AR')}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: 'rgba(255,255,255,0.45)', marginTop: '10px', lineHeight: 1.5 }}>
+                          Precio mínimo para ganar {margenObjetivo}% en este viaje. No cierres por menos.
+                        </div>
+                        {form.flete_cobrado && parseFloat(form.flete_cobrado) > 0 && parseFloat(form.flete_cobrado) < precioMinimo && (
+                          <div style={{ marginTop: '10px', padding: '8px 10px', backgroundColor: 'rgba(212,68,12,0.15)', border: '1px solid rgba(212,68,12,0.4)' }}>
+                            <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: '#ff8a65', lineHeight: 1.5 }}>
+                              ⚠ El flete de ${parseFloat(form.flete_cobrado).toLocaleString('es-AR')} está ${(precioMinimo - parseFloat(form.flete_cobrado)).toLocaleString('es-AR')} por debajo del mínimo para {margenObjetivo}%.
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Confirmar / Cancelar */}
@@ -1283,7 +1454,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '6px' }}>Rentabilidad del flete</div>
                         <div className="flex items-center justify-between">
                           <div className="text-sm" style={{ color: '#4a4540' }}>
-                            Flete: ${parseFloat(form.flete_cobrado).toLocaleString('es-AR')} · Costo: ${costoConPeajes.toLocaleString('es-AR')}{peajesTotal > 0 ? ' (comb.+peajes)' : ''}
+                            Flete: ${parseFloat(form.flete_cobrado).toLocaleString('es-AR')} · Costo real: ${costoTotalReal.toLocaleString('es-AR')}{hayCostosExtra ? ' (todo incluido)' : ''}
                           </div>
                           <div style={{ textAlign: 'right' }}>
                             <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '1px', color: colorMargen, textTransform: 'uppercase', marginBottom: '2px' }}>{gananciaNeta! >= 0 ? 'Ganancia' : 'Pérdida'}</div>

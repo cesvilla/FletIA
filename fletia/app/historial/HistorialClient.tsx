@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import Sidebar from '@/app/components/Sidebar';
 
 interface Viaje {
   id: string;
@@ -17,6 +18,7 @@ interface Viaje {
   litros_reales?: number;
   consumo_real?: number;
   costo_total: number;
+  peajes_total?: number;
   costo_por_km: number;
   porcentaje_carga?: number;
   flete_cobrado?: number;
@@ -31,8 +33,12 @@ interface Viaje {
 interface EditForm {
   origen: string;
   destino: string;
-  litros_reales: string;
+  peso_carga: string;
 }
+
+// Costo real del viaje = combustible + operativos (en costo_total) + peajes
+const costoRealViaje = (v: { costo_total: number; peajes_total?: number }) =>
+  v.costo_total + (v.peajes_total ?? 0);
 
 const RUTA_LABEL: Record<string, string> = { autopista: 'Autopista', mixta: 'Mixta', urbana: 'Urbana' };
 const TERRENO_LABEL: Record<string, string> = { plano: 'Plano', ondulado: 'Ondulado', montanoso: 'Montañoso' };
@@ -50,7 +56,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
   const [viajes, setViajes] = useState<Viaje[]>(initViajes);
   const [expandido, setExpandido] = useState<string | null>(null);
   const [editando, setEditando] = useState<string | null>(null);
-  const [form, setForm] = useState<EditForm>({ origen: '', destino: '', litros_reales: '' });
+  const [form, setForm] = useState<EditForm>({ origen: '', destino: '', peso_carga: '' });
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<{ id: string; texto: string; ok: boolean } | null>(null);
   const [mesSeleccionado, setMesSeleccionado] = useState('');
@@ -88,7 +94,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
 
   // Totales del filtro actual
   const totales = useMemo(() => ({
-    costo: viajesFiltrados.reduce((a, v) => a + v.costo_total, 0),
+    costo: viajesFiltrados.reduce((a, v) => a + costoRealViaje(v), 0),
     flete: viajesFiltrados.reduce((a, v) => a + (v.flete_cobrado || 0), 0),
     km: viajesFiltrados.reduce((a, v) => a + v.kilometros, 0),
     litros: viajesFiltrados.reduce((a, v) => a + v.litros_totales, 0),
@@ -109,7 +115,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
     e.stopPropagation();
     setEditando(v.id);
     setExpandido(v.id);
-    setForm({ origen: v.origen || '', destino: v.destino || '', litros_reales: v.litros_reales?.toString() || '' });
+    setForm({ origen: v.origen || '', destino: v.destino || '', peso_carga: v.peso_carga?.toString() || '' });
     setMensaje(null);
   }
 
@@ -121,39 +127,44 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
 
   async function guardarEdicion(v: Viaje) {
     setGuardando(true);
-    const litrosNum = parseFloat(form.litros_reales);
-    const litrosValidos = !isNaN(litrosNum) && litrosNum > 0;
+    const pesoNum = parseFloat(form.peso_carga);
+    const pesoValido = !isNaN(pesoNum) && pesoNum >= 0;
+    const maxTon = v.camiones?.capacidad_max_ton;
+
+    if (pesoValido && maxTon && pesoNum > maxTon) {
+      setMensaje({ id: v.id, texto: `El peso supera la capacidad del camión (${maxTon} ton)`, ok: false });
+      setGuardando(false);
+      return;
+    }
+
     const updates: Record<string, unknown> = {};
     if (form.origen.trim()) updates.origen = form.origen.trim();
     if (form.destino.trim()) updates.destino = form.destino.trim();
-    if (litrosValidos) updates.litros_reales = litrosNum;
+    let nuevoPorcentaje: number | undefined;
+    if (pesoValido) {
+      updates.peso_carga = pesoNum;
+      if (maxTon) {
+        nuevoPorcentaje = Math.min(Math.round((pesoNum / maxTon) * 100), 100);
+        updates.porcentaje_carga = nuevoPorcentaje;
+      }
+    }
+
     if (Object.keys(updates).length > 0) {
       await supabase.from('viajes').update(updates).eq('id', v.id);
     }
-    let mensajeIA = '';
-    if (litrosValidos && litrosNum !== v.litros_reales) {
-      const res = await fetch('/api/viajes/aprender', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ viaje_id: v.id, litros_reales: litrosNum }),
-      });
-      const json = await res.json();
-      if (json.ok) {
-        const precStr = json.precisionPct !== undefined ? ` · Precisión: ${json.precisionPct}%` : '';
-        mensajeIA = json.aprendio
-          ? ` · IA actualizada: ${json.consumoBaseNuevo} L/100km (${json.viajesEntrenados} viajes${precStr})`
-          : ` · IA confirmada${precStr}`;
-        if (json.precisionPct !== undefined) {
-          setPrecisionMap(prev => ({ ...prev, [v.id]: { precisionPct: json.precisionPct, consumoBaseNuevo: json.consumoBaseNuevo, viajesEntrenados: json.viajesEntrenados } }));
-        }
-      }
-    }
+
     setViajes(prev => prev.map(x =>
       x.id === v.id
-        ? { ...x, origen: form.origen.trim() || x.origen, destino: form.destino.trim() || x.destino, litros_reales: litrosValidos ? litrosNum : x.litros_reales }
+        ? {
+            ...x,
+            origen: form.origen.trim() || x.origen,
+            destino: form.destino.trim() || x.destino,
+            peso_carga: pesoValido ? pesoNum : x.peso_carga,
+            porcentaje_carga: nuevoPorcentaje ?? x.porcentaje_carga,
+          }
         : x
     ));
-    setMensaje({ id: v.id, texto: '✓ Guardado' + mensajeIA, ok: true });
+    setMensaje({ id: v.id, texto: '✓ Guardado', ok: true });
     setGuardando(false);
     setTimeout(() => { setEditando(null); setMensaje(null); }, 2200);
   }
@@ -240,7 +251,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
 
       // Filas de datos
       viajesFiltrados.forEach((v, i) => {
-        const ganancia = v.flete_cobrado ? v.flete_cobrado - v.costo_total : null;
+        const ganancia = v.flete_cobrado ? v.flete_cobrado - costoRealViaje(v) : null;
         const margen   = v.flete_cobrado && ganancia !== null ? ((ganancia / v.flete_cobrado) * 100) : null;
         const row = ws1.addRow({
           fecha:     new Date(v.created_at).toLocaleDateString('es-AR'),
@@ -257,7 +268,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
           litrosEst: Math.round(v.litros_totales),
           litrosReal:v.litros_reales ? Math.round(v.litros_reales) : '—',
           consumo:   v.consumo_real || '—',
-          costo:     `$${Math.round(v.costo_total).toLocaleString('es-AR')}`,
+          costo:     `$${Math.round(costoRealViaje(v)).toLocaleString('es-AR')}`,
           costokm:   `$${v.costo_por_km}`,
           flete:     v.flete_cobrado ? `$${Math.round(v.flete_cobrado).toLocaleString('es-AR')}` : '—',
           ganancia:  ganancia !== null ? `$${Math.round(ganancia).toLocaleString('es-AR')}` : '—',
@@ -341,7 +352,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
         const mes = v.created_at.substring(0, 7);
         if (!resumenMap[mes]) resumenMap[mes] = { mes: formatMes(mes), viajes: 0, costo: 0, flete: 0, km: 0, litros: 0 };
         resumenMap[mes].viajes++;
-        resumenMap[mes].costo  += v.costo_total;
+        resumenMap[mes].costo  += costoRealViaje(v);
         resumenMap[mes].flete  += v.flete_cobrado || 0;
         resumenMap[mes].km     += v.kilometros;
         resumenMap[mes].litros += v.litros_totales;
@@ -418,7 +429,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
       doc.setTextColor(180, 180, 180);
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
-      doc.text('// combustible inteligente', 14, 23);
+      doc.text('// inteligencia para cada viaje', 14, 23);
 
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(13);
@@ -459,7 +470,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                     'Lts Est.', 'Lts Real', 'Costo ($)', '$/km', 'Flete ($)', 'Ganancia ($)', 'Margen'];
 
       const rows = viajesFiltrados.map(v => {
-        const ganancia = v.flete_cobrado ? v.flete_cobrado - v.costo_total : null;
+        const ganancia = v.flete_cobrado ? v.flete_cobrado - costoRealViaje(v) : null;
         const margen   = v.flete_cobrado && ganancia !== null ? `${((ganancia / v.flete_cobrado) * 100).toFixed(1)}%` : '—';
         return [
           new Date(v.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }),
@@ -471,7 +482,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
           RUTA_LABEL[v.tipo_ruta || ''] || v.tipo_ruta || '—',
           Math.round(v.litros_totales),
           v.litros_reales ? Math.round(v.litros_reales) : '—',
-          `$${Math.round(v.costo_total).toLocaleString('es-AR')}`,
+          `$${Math.round(costoRealViaje(v)).toLocaleString('es-AR')}`,
           `$${v.costo_por_km}`,
           v.flete_cobrado ? `$${Math.round(v.flete_cobrado).toLocaleString('es-AR')}` : '—',
           ganancia !== null ? `$${Math.round(ganancia).toLocaleString('es-AR')}` : '—',
@@ -551,39 +562,9 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
 
   return (
     <div className="flex min-h-screen bg-bg">
-      {sidebarOpen && <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-40 md:hidden" />}
+      <Sidebar active="historial" empresa={empresa} email={email} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <aside className={`fixed top-0 left-0 h-screen w-[220px] bg-ink flex flex-col z-50 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-        <div className="p-6 border-b border-white/10 flex items-start justify-between">
-          <div>
-            <div className="font-display text-2xl font-black text-white">Flet<span className="text-accent">IA</span></div>
-            <div className="font-mono text-[8px] tracking-[2px] text-white/30 mt-1 uppercase">// combustible inteligente</div>
-          </div>
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-white/40 hover:text-white text-xl leading-none">×</button>
-        </div>
-        <nav className="flex-1 py-4 overflow-y-auto">
-          <div className="font-mono text-[8px] tracking-[2px] text-white/25 px-5 my-4 uppercase">Principal</div>
-          <a href="/dashboard" className="flex items-center gap-2.5 px-5 py-2.5 text-white/40 hover:text-white/80 hover:bg-white/5 text-sm cursor-pointer transition-colors"><span className="w-4 text-center">⚡</span> Dashboard</a>
-          <a href="/viajes" className="flex items-center gap-2.5 px-5 py-2.5 text-white/40 hover:text-white/80 hover:bg-white/5 text-sm cursor-pointer transition-colors"><span className="w-4 text-center">🧮</span> Calculadora</a>
-          <a href="/historial" className="flex items-center gap-2.5 px-5 py-2.5 text-white text-sm font-medium bg-accent/15 border-l-2 border-accent cursor-pointer"><span className="w-4 text-center">📋</span> Historial</a>
-          <div className="font-mono text-[8px] tracking-[2px] text-white/25 px-5 my-4 uppercase">Flota</div>
-          <a href="/camiones" className="flex items-center gap-2.5 px-5 py-2.5 text-white/40 hover:text-white/80 hover:bg-white/5 text-sm cursor-pointer transition-colors"><span className="w-4 text-center">🚛</span> Mis camiones</a>
-          <div className="font-mono text-[8px] tracking-[2px] text-white/25 px-5 my-4 uppercase">Análisis</div>
-          <a href="/rentabilidad" className="flex items-center gap-2.5 px-5 py-2.5 text-white/40 hover:text-white/80 hover:bg-white/5 text-sm cursor-pointer transition-colors"><span className="w-4 text-center">💰</span> Rentabilidad</a>
-        </nav>
-        <div className="p-5 border-t border-white/10">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 bg-accent rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0">{iniciales}</div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-white/80 truncate">{empresa}</div>
-              <div className="font-mono text-[8px] text-white/30 truncate">{email}</div>
-            </div>
-          </div>
-          <button onClick={handleLogout} className="w-full text-left font-mono text-[10px] text-white/40 hover:text-accent transition-colors">→ Cerrar sesión</button>
-        </div>
-      </aside>
-
-      <main className="flex-1 md:ml-[220px]">
+      <main className="flex-1 md:ml-56">
         <div className="bg-card border-b border-ink/10 px-4 md:px-7 h-14 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(true)} className="md:hidden flex flex-col gap-1 p-1.5">
@@ -662,18 +643,17 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                 </div>
               </div>
 
-              {/* Totales del período */}
+              {/* Totales del período (flete y ganancia están en Rentabilidad) */}
               {viajesFiltrados.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
                   {[
                     { label: 'Km recorridos', val: `${totales.km.toLocaleString('es-AR')} km` },
-                    { label: 'Gasto combustible', val: `$${Math.round(totales.costo).toLocaleString('es-AR')}`, color: '#d4440c' },
-                    { label: 'Flete cobrado', val: totales.flete > 0 ? `$${Math.round(totales.flete).toLocaleString('es-AR')}` : '—', color: '#1a6b3a' },
-                    { label: 'Ganancia neta', val: totales.flete > 0 ? `$${Math.round(totales.flete - totales.costo).toLocaleString('es-AR')}` : '—', color: totales.flete - totales.costo >= 0 ? '#1a6b3a' : '#d4440c' },
+                    { label: 'Litros estimados', val: `${Math.round(totales.litros).toLocaleString('es-AR')} lts` },
+                    { label: 'Costo total', val: `$${Math.round(totales.costo).toLocaleString('es-AR')}`, color: '#d4440c' },
                   ].map(k => (
                     <div key={k.label} className="bg-card border border-ink/10 p-3">
-                      <div className="font-mono text-[8px] text-ink-3 uppercase tracking-wider mb-1">{k.label}</div>
-                      <div className="font-bold text-base" style={{ color: k.color || 'inherit' }}>{k.val}</div>
+                      <div className="font-mono text-[10px] text-ink-2 uppercase tracking-wider mb-1">{k.label}</div>
+                      <div className="font-bold text-lg" style={{ color: k.color || 'inherit' }}>{k.val}</div>
                     </div>
                   ))}
                 </div>
@@ -697,10 +677,11 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
 
                   {viajesFiltrados.map((v) => {
                     const abierto = expandido === v.id;
+                    const costoReal = costoRealViaje(v);
                     const margen = v.flete_cobrado
-                      ? (((v.flete_cobrado - v.costo_total) / v.flete_cobrado) * 100).toFixed(1)
+                      ? (((v.flete_cobrado - costoReal) / v.flete_cobrado) * 100).toFixed(1)
                       : null;
-                    const ganancia = v.flete_cobrado ? v.flete_cobrado - v.costo_total : null;
+                    const ganancia = v.flete_cobrado ? v.flete_cobrado - costoReal : null;
                     const colorMargen = margen
                       ? parseFloat(margen) > 25 ? '#1a6b3a' : parseFloat(margen) > 10 ? '#c8860a' : '#d4440c'
                       : '#8a8278';
@@ -716,18 +697,31 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                             <div className="text-sm font-semibold">
                               {v.origen && v.destino ? `${v.origen} → ${v.destino}` : `${v.kilometros} km`}
                             </div>
-                            <div className="font-mono text-[9px] text-gray-400 mt-1">
+                            <div className="font-mono text-[11px] text-gray-500 mt-1">
                               {v.camiones?.patente} · {v.camiones?.marca} {v.camiones?.modelo} · {v.peso_carga} ton
                               {v.litros_reales && <span className="text-green-600"> · real: {v.litros_reales} lts ✓</span>}
                             </div>
-                            <div className="font-mono text-[9px] text-gray-300 mt-0.5">
+                            <div className="font-mono text-[10px] text-gray-400 mt-0.5">
                               {new Date(v.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                             </div>
                           </div>
                           <div className="text-right flex-shrink-0 flex items-center gap-2 md:gap-3">
                             <div>
-                              <div className="text-base md:text-lg font-bold">${v.costo_total.toLocaleString('es-AR')}</div>
-                              <div className="hidden sm:block font-mono text-[9px] text-gray-400">${v.costo_por_km}/km</div>
+                              {v.flete_cobrado ? (
+                                <>
+                                  <div className="text-base md:text-lg font-bold" style={{ color: '#1a6b3a' }}>${v.flete_cobrado.toLocaleString('es-AR')}</div>
+                                  <div className="font-mono text-[10px] text-gray-500">cobrado</div>
+                                  <div className="font-mono text-[11px] mt-0.5" style={{ color: '#4a4540' }}>costo ${costoReal.toLocaleString('es-AR')}</div>
+                                  <div className="font-mono text-[11px] font-bold" style={{ color: (ganancia ?? 0) >= 0 ? '#1a6b3a' : '#d4440c' }}>
+                                    {(ganancia ?? 0) >= 0 ? 'gana +' : 'pierde -'}${Math.abs(Math.round(ganancia ?? 0)).toLocaleString('es-AR')}
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="text-base md:text-lg font-bold">${costoReal.toLocaleString('es-AR')}</div>
+                                  <div className="font-mono text-[11px] text-gray-500">{(v.peajes_total ?? 0) > 0 ? 'costo total' : `$${v.costo_por_km}/km`}</div>
+                                </>
+                              )}
                             </div>
                             {/* Badge precisión o botón entrenar */}
                             {v.litros_reales ? (
@@ -832,7 +826,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                                     <div className="font-mono text-[8px] text-gray-400 uppercase mb-2">Rentabilidad del flete</div>
                                     <div className="flex items-end justify-between">
                                       <div className="text-sm" style={{ color: '#4a4540' }}>
-                                        Flete: ${v.flete_cobrado.toLocaleString('es-AR')} · Combustible: ${v.costo_total.toLocaleString('es-AR')}
+                                        Flete: ${v.flete_cobrado.toLocaleString('es-AR')} · Costo real: ${costoReal.toLocaleString('es-AR')}{(v.peajes_total ?? 0) > 0 ? ` (comb. $${v.costo_total.toLocaleString('es-AR')} + peajes $${(v.peajes_total ?? 0).toLocaleString('es-AR')})` : ''}
                                       </div>
                                       <div className="text-right">
                                         <div className="font-mono text-[8px] uppercase mb-0.5" style={{ color: colorMargen }}>{ganancia! >= 0 ? 'Ganancia' : 'Pérdida'}</div>
@@ -915,8 +909,11 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                                     <input type="text" value={form.destino} onChange={e => setForm(f => ({ ...f, destino: e.target.value }))} placeholder={v.destino || 'Ej: Buenos Aires'} className="w-full text-sm px-3 py-2 border border-gray-200 bg-white text-ink outline-none focus:border-orange-400 transition-colors" />
                                   </div>
                                   <div>
-                                    <label className="font-mono text-[9px] text-gray-500 uppercase block mb-1">Litros reales <span style={{ color: '#d4440c' }}>(actualiza IA)</span></label>
-                                    <input type="number" value={form.litros_reales} onChange={e => setForm(f => ({ ...f, litros_reales: e.target.value }))} placeholder={v.litros_reales?.toString() || v.litros_totales.toString()} min="1" step="0.1" className="w-full text-sm px-3 py-2 border border-gray-200 bg-white text-ink outline-none focus:border-orange-400 transition-colors" />
+                                    <label className="font-mono text-[9px] text-gray-500 uppercase block mb-1">
+                                      Toneladas (carga)
+                                      {v.camiones?.capacidad_max_ton ? <span style={{ color: '#d4440c' }}> máx {v.camiones.capacidad_max_ton}</span> : null}
+                                    </label>
+                                    <input type="number" value={form.peso_carga} onChange={e => setForm(f => ({ ...f, peso_carga: e.target.value }))} placeholder={v.peso_carga?.toString()} min="0" step="0.5" max={v.camiones?.capacidad_max_ton} className="w-full text-sm px-3 py-2 border border-gray-200 bg-white text-ink outline-none focus:border-orange-400 transition-colors" />
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">

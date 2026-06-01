@@ -27,7 +27,9 @@ export async function POST(request: Request) {
         factor_terreno: body.resultado.factorTerreno,
         consumo_real: body.resultado.consumoReal,
         litros_totales: body.resultado.litrosTotales,
-        costo_total: body.resultado.costoTotal,
+        // costo_total incluye combustible + costos operativos (conductor + mantenimiento).
+        // Los peajes van en peajes_total. Si no viene costo_total, se usa solo combustible.
+        costo_total: body.costo_total ?? body.resultado.costoTotal,
         costo_por_km: body.resultado.costoPorKm,
         porcentaje_carga: body.resultado.porcentajeCarga,
         descripcion_ia: body.resultado.descripcion,

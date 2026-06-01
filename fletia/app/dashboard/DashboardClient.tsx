@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import Sidebar from '@/app/components/Sidebar';
 
 interface Recordatorio { id: string; texto: string; fecha?: string; completado: boolean; }
 interface Precio { empresa: string; tipo: string; precio: number; provincia?: string; }
@@ -10,10 +11,10 @@ interface Precio { empresa: string; tipo: string; precio: number; provincia?: st
 interface Props {
   email: string; empresa: string; userId: string;
   gastoMes: number; gananciasMes: number; totalViajes: number; totalCamiones: number;
-  recordatorios: Recordatorio[]; precios: Precio[];
+  recordatorios: Recordatorio[]; precios: Precio[]; preciosFuente?: string;
 }
 
-export default function DashboardClient({ email, empresa, userId, gastoMes, gananciasMes, totalViajes, totalCamiones, recordatorios: initRecs, precios }: Props) {
+export default function DashboardClient({ email, empresa, userId, gastoMes, gananciasMes, totalViajes, totalCamiones, recordatorios: initRecs, precios, preciosFuente }: Props) {
   const router = useRouter();
   const supabase = createClient();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -113,39 +114,9 @@ export default function DashboardClient({ email, empresa, userId, gastoMes, gana
 
   return (
     <div className="flex min-h-screen bg-bg">
-      {sidebarOpen && <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-40 md:hidden" />}
+      <Sidebar active="dashboard" empresa={empresa} email={email} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <aside className={`fixed top-0 left-0 h-screen w-[220px] bg-ink flex flex-col z-50 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-        <div className="p-6 border-b border-white/10 flex items-start justify-between">
-          <div>
-            <div className="font-display text-2xl font-black text-white">Flet<span className="text-accent">IA</span></div>
-            <div className="font-mono text-[8px] tracking-[2px] text-white/30 mt-1 uppercase">// combustible inteligente</div>
-          </div>
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-white/40 hover:text-white text-xl leading-none">×</button>
-        </div>
-        <nav className="flex-1 py-4 overflow-y-auto">
-          <div className="font-mono text-[8px] tracking-[2px] text-white/25 px-5 my-4 uppercase">Principal</div>
-          <a href="/dashboard" className="flex items-center gap-2.5 px-5 py-2.5 text-white text-sm font-medium bg-accent/15 border-l-2 border-accent cursor-pointer"><span className="w-4 text-center">⚡</span> Dashboard</a>
-          <a href="/viajes" className="flex items-center gap-2.5 px-5 py-2.5 text-white/40 hover:text-white/80 hover:bg-white/5 text-sm cursor-pointer transition-colors"><span className="w-4 text-center">🧮</span> Calculadora</a>
-          <a href="/historial" className="flex items-center gap-2.5 px-5 py-2.5 text-white/40 hover:text-white/80 hover:bg-white/5 text-sm cursor-pointer transition-colors"><span className="w-4 text-center">📋</span> Historial</a>
-          <div className="font-mono text-[8px] tracking-[2px] text-white/25 px-5 my-4 uppercase">Flota</div>
-          <a href="/camiones" className="flex items-center gap-2.5 px-5 py-2.5 text-white/40 hover:text-white/80 hover:bg-white/5 text-sm cursor-pointer transition-colors"><span className="w-4 text-center">🚛</span> Mis camiones</a>
-          <div className="font-mono text-[8px] tracking-[2px] text-white/25 px-5 my-4 uppercase">Análisis</div>
-          <a href="/rentabilidad" className="flex items-center gap-2.5 px-5 py-2.5 text-white/40 hover:text-white/80 hover:bg-white/5 text-sm cursor-pointer transition-colors"><span className="w-4 text-center">💰</span> Rentabilidad</a>
-        </nav>
-        <div className="p-5 border-t border-white/10">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 bg-accent rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0">{iniciales}</div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-white/80 truncate">{empresa}</div>
-              <div className="font-mono text-[8px] text-white/30 truncate">{email}</div>
-            </div>
-          </div>
-          <button onClick={handleLogout} className="w-full text-left font-mono text-[10px] text-white/40 hover:text-accent transition-colors">→ Cerrar sesión</button>
-        </div>
-      </aside>
-
-      <main className="flex-1 md:ml-[220px]">
+      <main className="flex-1 md:ml-56">
         <div className="bg-card border-b border-ink/10 px-4 md:px-7 h-14 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(true)} className="md:hidden flex flex-col gap-1 p-1.5">
@@ -190,15 +161,20 @@ export default function DashboardClient({ email, empresa, userId, gastoMes, gana
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-card border border-ink/10 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div className="font-mono text-[10px] tracking-[3px] text-accent uppercase">⛽ Precios combustible hoy</div>
+              <div className="flex items-center justify-between mb-1">
+                <div className="font-mono text-[10px] tracking-[3px] text-accent uppercase">⛽ Gasoil hoy — promedio país</div>
                 <div className="font-mono text-[9px] text-ink-3">{new Date().toLocaleDateString('es-AR')}</div>
+              </div>
+              <div className="font-mono text-[9px] text-ink-3 mb-4">
+                {preciosFuente === 'referencia'
+                  ? 'Valores de referencia'
+                  : 'Fuente: Secretaría de Energía · promedio nacional'}
               </div>
               {precios.length === 0 ? (
                 <div className="text-center py-6">
                   <div className="text-2xl mb-2">⛽</div>
-                  <div className="text-sm text-ink-2 mb-1">Actualizando precios...</div>
-                  <div className="font-mono text-[9px] text-ink-3">Se actualiza automáticamente cada día</div>
+                  <div className="text-sm text-ink-2 mb-1">Sin datos disponibles</div>
+                  <div className="font-mono text-[9px] text-ink-3">Reintentamos automáticamente en la próxima carga</div>
                 </div>
               ) : (
                 <div className="space-y-3">

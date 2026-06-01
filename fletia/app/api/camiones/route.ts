@@ -33,6 +33,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Faltan campos obligatorios' }, { status: 400 });
     }
 
+    // Límite de camiones autorizado por el admin (guardado en user_metadata).
+    // Por defecto 1; el admin lo amplía por usuario desde el panel /admin.
+    const limite = Number(user.user_metadata?.limite_camiones ?? 1);
+    const { count } = await supabase
+      .from('camiones')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('activo', true);
+
+    if ((count ?? 0) >= limite) {
+      return NextResponse.json(
+        { error: `Llegaste al límite de ${limite} camión${limite === 1 ? '' : 'es'} de tu plan. Escribinos para autorizar más unidades.` },
+        { status: 403 },
+      );
+    }
+
     const { data, error } = await supabase
       .from('camiones')
       .insert({
