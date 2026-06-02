@@ -80,14 +80,24 @@ function normalizarCiudad(nombre: string): string {
     .trim();
 }
 
+// Caché en memoria de geocodificaciones directas (L1, por instancia caliente).
+const cacheGeocode = new Map<string, { lat: number; lon: number; nombre: string }>();
+
 async function geocodificar(lugar: string): Promise<{ lat: number; lon: number; nombre: string } | null> {
   // 1. Buscar en diccionario local primero (evita errores de Nominatim con provincias)
   const clave = normalizarCiudad(lugar);
   if (CIUDADES_AR[clave]) return CIUDADES_AR[clave];
 
-  // 2. Fallback a Nominatim para localidades no cubiertas
+  // 2. Caché de lugares ya resueltos por Nominatim (no cambian)
+  const cached = cacheGeocode.get(clave);
+  if (cached) return cached;
+
+  // 3. Fallback a Nominatim para localidades no cubiertas
   const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(lugar + ', Argentina')}&format=json&limit=5&addressdetails=1&countrycodes=ar`;
-  const res = await fetchConTimeout(url, { headers: { 'User-Agent': 'FletIA/1.0 (fletia@gmail.com)' } }, 7000);
+  const res = await fetchConTimeout(url, {
+    headers: { 'User-Agent': 'FletIA/1.0 (fletia@gmail.com)' },
+    next: { revalidate: 60 * 60 * 24 * 30 }, // L2: data-cache de Next (30 días)
+  }, 7000);
   if (!res || !res.ok) return null;
   const data = await res.json();
   if (!data.length) return null;
@@ -99,11 +109,13 @@ async function geocodificar(lugar: string): Promise<{ lat: number; lon: number; 
   );
   const elegido = conCiudad || data[0];
 
-  return {
+  const out = {
     lat: parseFloat(elegido.lat),
     lon: parseFloat(elegido.lon),
     nombre: elegido.display_name.split(',').slice(0, 2).join(',').trim(),
   };
+  cacheGeocode.set(clave, out);
+  return out;
 }
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {

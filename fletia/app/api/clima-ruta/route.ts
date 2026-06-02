@@ -68,36 +68,55 @@ function corregirCiudad(ciudad: string): string {
   return CORRECCIONES_CIUDAD[ciudad.toLowerCase().trim()] ?? ciudad;
 }
 
+// Caché en memoria de nombres geocodificados (L1, por instancia caliente del server).
+// El nombre de un punto no cambia, así que se reutiliza entre requests sin volver a
+// pegarle a Nominatim. Evita reventar el rate-limit (hasta 14 puntos por ruta).
+const cacheNombres = new Map<string, string>();
+
 async function reversGeocode(lat: number, lon: number, km: number, esExtremo = false): Promise<string> {
+  // Origen y destino siempre con máximo detalle (zoom 10) para mostrar el lugar exacto
+  const zoom = esExtremo ? 10 : km > 200 ? 6 : km > 80 ? 8 : 10;
+  // Redondeamos a ~100m: sube los aciertos de caché y el nombre no cambia a esa escala.
+  const rlat = lat.toFixed(3), rlon = lon.toFixed(3);
+  const key = `${rlat},${rlon},${zoom}`;
+  const cached = cacheNombres.get(key);
+  if (cached !== undefined) return cached;
+
   try {
-    // Origen y destino siempre con máximo detalle (zoom 10) para mostrar el lugar exacto
-    const zoom = esExtremo ? 10 : km > 200 ? 6 : km > 80 ? 8 : 10;
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=${zoom}&addressdetails=1`;
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${rlat}&lon=${rlon}&format=json&zoom=${zoom}&addressdetails=1`;
     const res = await fetch(url, {
       headers: { 'User-Agent': 'FletIA/1.0 (fletia@gmail.com)' },
+      // L2: caché de datos de Next (persistente/compartida entre requests). Un nombre
+      // no cambia, así que lo guardamos 30 días.
+      next: { revalidate: 60 * 60 * 24 * 30 },
     });
     if (!res.ok) return `${lat.toFixed(1)}, ${lon.toFixed(1)}`;
     const data = await res.json();
     const addr = data.address;
     const provincia = addr?.state;
 
+    let resultado: string;
     // Origen/destino y rutas cortas: mostrar ciudad/departamento con detalle
     if (esExtremo || km <= 80) {
       const ciudadRaw = addr?.city || addr?.town || addr?.village || addr?.county || addr?.state_district;
       const ciudad = ciudadRaw ? corregirCiudad(ciudadRaw) : null;
-      if (ciudad && provincia && ciudad !== provincia) return `${ciudad}, ${provincia}`;
-      return ciudad || provincia || 'En ruta';
+      resultado = (ciudad && provincia && ciudad !== provincia)
+        ? `${ciudad}, ${provincia}`
+        : (ciudad || provincia || 'En ruta');
+    } else if (km > 200) {
+      resultado = provincia || data.display_name?.split(',')[0] || 'En ruta';
+    } else {
+      // Ruta media (puntos intermedios): ciudad + provincia
+      const ciudadRaw = addr?.city || addr?.town || addr?.county || addr?.state_district;
+      const ciudad = ciudadRaw ? corregirCiudad(ciudadRaw) : null;
+      resultado = (ciudad && provincia && ciudad !== provincia)
+        ? `${ciudad}, ${provincia}`
+        : (provincia || ciudad || 'En ruta');
     }
 
-    if (km > 200) {
-      return provincia || data.display_name?.split(',')[0] || 'En ruta';
-    }
-
-    // Ruta media (puntos intermedios): ciudad + provincia
-    const ciudadRaw = addr?.city || addr?.town || addr?.county || addr?.state_district;
-    const ciudad = ciudadRaw ? corregirCiudad(ciudadRaw) : null;
-    if (ciudad && provincia && ciudad !== provincia) return `${ciudad}, ${provincia}`;
-    return provincia || ciudad || 'En ruta';
+    // Solo cacheamos nombres "buenos" (no el fallback genérico).
+    if (resultado !== 'En ruta') cacheNombres.set(key, resultado);
+    return resultado;
 
   } catch {
     return 'En ruta';

@@ -95,12 +95,21 @@ function muestrarPuntos(polyline: [number, number][], n: number): [number, numbe
   return puntos;
 }
 
+// Caché en memoria de nombres geocodificados (L1, por instancia caliente).
+const cacheNombres = new Map<string, string>();
+
 // Geocodificación inversa simple para nombrar los segmentos
 async function reversGeocode(lat: number, lon: number): Promise<string> {
+  // Redondeo a ~100m: más aciertos de caché, el nombre no cambia a esa escala.
+  const rlat = lat.toFixed(3), rlon = lon.toFixed(3);
+  const key = `${rlat},${rlon}`;
+  const cached = cacheNombres.get(key);
+  if (cached !== undefined) return cached;
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=8&addressdetails=1`;
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${rlat}&lon=${rlon}&format=json&zoom=8&addressdetails=1`;
     const res = await fetchConTimeout(url, {
       headers: { 'User-Agent': 'FletIA/1.0 (fletia@gmail.com)' },
+      next: { revalidate: 60 * 60 * 24 * 30 }, // L2: data-cache de Next (30 días)
     }, 6000);
     if (!res || !res.ok) return 'En ruta';
     const data = await res.json();
@@ -110,8 +119,11 @@ async function reversGeocode(lat: number, lon: number): Promise<string> {
     // Nominatim devuelve "Comuna N" en CABA (poco útil y engañoso al aplicarlo a
     // toda la zona): lo descartamos y usamos solo la provincia.
     if (ciudad && /^comuna\s/i.test(ciudad)) ciudad = null;
-    if (ciudad && provincia && ciudad !== provincia) return `${ciudad}, ${provincia}`;
-    return provincia || ciudad || 'En ruta';
+    const resultado = (ciudad && provincia && ciudad !== provincia)
+      ? `${ciudad}, ${provincia}`
+      : (provincia || ciudad || 'En ruta');
+    if (resultado !== 'En ruta') cacheNombres.set(key, resultado);
+    return resultado;
   } catch {
     return 'En ruta';
   }
