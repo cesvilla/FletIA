@@ -14,7 +14,7 @@ export default function LoginPage() {
 
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const modoInicial = searchParams?.get('modo') === 'registro' ? 'registro' : 'login';
-  const [modo, setModo] = useState<'login' | 'registro'>(modoInicial as 'login' | 'registro');
+  const [modo, setModo] = useState<'login' | 'registro' | 'recuperar'>(modoInicial as 'login' | 'registro');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [empresa, setEmpresa] = useState('');
@@ -29,6 +29,23 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      if (modo === 'recuperar') {
+        // Enviar enlace de restablecimiento de contraseña al email.
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+        if (!emailRegex.test(email)) {
+          setError('El email no es válido. Revisá que tenga el formato correcto (ej: nombre@empresa.com).');
+          setLoading(false);
+          return;
+        }
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (error) throw error;
+        setMensaje('Si el email está registrado, te enviamos un enlace para restablecer tu contraseña. Revisá tu bandeja de entrada (y la carpeta de spam).');
+        setLoading(false);
+        return;
+      }
+
       if (modo === 'registro') {
         // Validar formato de email
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -117,6 +134,7 @@ export default function LoginPage() {
         <div className="bg-card border border-ink/10 p-8">
 
           {/* Tabs login / registro */}
+          {modo !== 'recuperar' && (
           <div className="flex mb-6 border-b border-ink/10">
             <button
               type="button"
@@ -141,15 +159,18 @@ export default function LoginPage() {
               CREAR CUENTA
             </button>
           </div>
+          )}
 
           {/* Heading */}
           <h1 className="text-2xl font-bold mb-1">
-            {modo === 'login' ? 'Bienvenido de vuelta' : 'Crear tu cuenta'}
+            {modo === 'login' ? 'Bienvenido de vuelta' : modo === 'registro' ? 'Crear tu cuenta' : 'Recuperar contraseña'}
           </h1>
           <p className="text-sm text-ink-3 mb-6">
             {modo === 'login'
               ? 'Ingresá para ver tu flota y calcular viajes.'
-              : 'Empezá gratis. Sin tarjeta de crédito.'}
+              : modo === 'registro'
+                ? 'Empezá gratis. Sin tarjeta de crédito.'
+                : 'Ingresá tu email y te mandamos un enlace para crear una contraseña nueva. Tus camiones y viajes quedan intactos.'}
           </p>
 
           {/* Formulario */}
@@ -188,7 +209,8 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Contraseña */}
+            {/* Contraseña (no en modo recuperar) */}
+            {modo !== 'recuperar' && (
             <div>
               <label className="font-mono text-[9px] tracking-[2px] text-ink-3 uppercase block mb-1.5">
                 Contraseña
@@ -203,7 +225,17 @@ export default function LoginPage() {
                 autoComplete={modo === 'registro' ? 'new-password' : 'current-password'}
                 className="w-full px-3 py-2.5 bg-bg border border-ink/20 text-ink text-sm font-medium outline-none focus:border-accent transition-colors"
               />
+              {modo === 'login' && (
+                <button
+                  type="button"
+                  onClick={() => { setModo('recuperar'); setError(null); setMensaje(null); }}
+                  className="font-mono text-[10px] text-accent hover:underline mt-2"
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+              )}
             </div>
+            )}
 
             {/* Mensaje de error */}
             {error && (
@@ -229,9 +261,21 @@ export default function LoginPage() {
                 ? 'PROCESANDO...'
                 : modo === 'login'
                   ? 'INGRESAR →'
-                  : 'CREAR CUENTA →'
+                  : modo === 'registro'
+                    ? 'CREAR CUENTA →'
+                    : 'ENVIAR ENLACE →'
               }
             </button>
+
+            {modo === 'recuperar' && (
+              <button
+                type="button"
+                onClick={() => { setModo('login'); setError(null); setMensaje(null); }}
+                className="w-full text-center font-mono text-[10px] text-ink-3 hover:text-ink-2 hover:underline"
+              >
+                ← Volver a iniciar sesión
+              </button>
+            )}
 
           </form>
 

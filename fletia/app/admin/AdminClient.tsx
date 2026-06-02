@@ -23,6 +23,8 @@ export default function AdminClient() {
   const [limites, setLimites] = useState<Record<string, string>>({});
   const [procesando, setProcesando] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<{ texto: string; tipo: 'ok' | 'error' } | null>(null);
+  const [resetUser, setResetUser] = useState<string | null>(null);
+  const [nuevaClave, setNuevaClave] = useState('');
 
   useEffect(() => { cargar(); }, []);
 
@@ -74,6 +76,30 @@ export default function AdminClient() {
     }
     setProcesando(null);
     setTimeout(() => setMensaje(null), 3000);
+  }
+
+  async function resetearClave(user_id: string) {
+    if (nuevaClave.length < 6) {
+      setMensaje({ texto: 'La clave debe tener al menos 6 caracteres', tipo: 'error' });
+      setTimeout(() => setMensaje(null), 3000);
+      return;
+    }
+    setProcesando(user_id);
+    const res = await fetch('/api/admin', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id, nueva_password: nuevaClave }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      setMensaje({ texto: '✓ Contraseña actualizada. Pasale la nueva clave al cliente.', tipo: 'ok' });
+      setResetUser(null);
+      setNuevaClave('');
+    } else {
+      setMensaje({ texto: `Error: ${data.error}`, tipo: 'error' });
+    }
+    setProcesando(null);
+    setTimeout(() => setMensaje(null), 4000);
   }
 
   function diasRestantes(fecha: string | null): string {
@@ -207,7 +233,8 @@ export default function AdminClient() {
                   </div>
                 </div>
                 {activos.map(a => (
-                  <div key={a.id} style={{ padding: '16px 20px', borderBottom: '1px solid rgba(26,23,20,0.06)', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                  <div key={a.id} style={{ borderBottom: '1px solid rgba(26,23,20,0.06)' }}>
+                  <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 200 }}>
                       <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1714' }}>{a.empresa || '(sin empresa)'}</div>
                       <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#8a8278', marginTop: 2 }}>{a.email}</div>
@@ -267,8 +294,35 @@ export default function AdminClient() {
                         >
                           Revocar
                         </button>
+                        <button
+                          onClick={() => { setResetUser(resetUser === a.user_id ? null : a.user_id); setNuevaClave(''); }}
+                          disabled={procesando === a.user_id}
+                          title="Cambiar la contraseña de este cliente"
+                          style={{ padding: '6px 12px', backgroundColor: 'rgba(26,23,20,0.06)', color: '#4a4540', border: '1px solid rgba(26,23,20,0.15)', fontFamily: 'DM Mono, monospace', fontSize: 10, cursor: 'pointer' }}
+                        >
+                          🔑 Clave
+                        </button>
                       </div>
                     </div>
+                  </div>
+                  {resetUser === a.user_id && (
+                    <div style={{ padding: '12px 20px', backgroundColor: '#fffbf0', borderTop: '1px dashed rgba(26,23,20,0.15)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#8a8278' }}>🔑 Nueva contraseña para {a.email}:</span>
+                      <input
+                        type="text"
+                        value={nuevaClave}
+                        onChange={e => setNuevaClave(e.target.value)}
+                        placeholder="mínimo 6 caracteres"
+                        style={{ flex: 1, minWidth: 160, padding: '6px 10px', border: '1px solid rgba(26,23,20,0.2)', backgroundColor: '#fff', fontFamily: 'DM Mono, monospace', fontSize: 12, outline: 'none' }}
+                      />
+                      <button onClick={() => resetearClave(a.user_id)} disabled={procesando === a.user_id} style={{ padding: '6px 14px', backgroundColor: '#1a1714', color: '#fff', border: 'none', fontFamily: 'DM Mono, monospace', fontSize: 10, fontWeight: 700, cursor: 'pointer', opacity: procesando === a.user_id ? 0.5 : 1 }}>
+                        Guardar clave
+                      </button>
+                      <button onClick={() => { setResetUser(null); setNuevaClave(''); }} style={{ padding: '6px 12px', backgroundColor: 'transparent', color: '#8a8278', border: '1px solid rgba(26,23,20,0.15)', fontFamily: 'DM Mono, monospace', fontSize: 10, cursor: 'pointer' }}>
+                        Cancelar
+                      </button>
+                    </div>
+                  )}
                   </div>
                 ))}
               </div>

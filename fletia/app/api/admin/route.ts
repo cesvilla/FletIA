@@ -105,6 +105,25 @@ export async function POST(request: Request) {
   return NextResponse.json({ ok: true, fecha_expiracion });
 }
 
+// PATCH — restablecer la contraseña de un usuario (reset manual hecho por el admin).
+// No depende de emails: el admin define la clave y se la pasa al cliente.
+// Cambiar la contraseña NO afecta los datos del usuario (camiones, viajes, etc.).
+export async function PATCH(request: Request) {
+  const admin_user = await verificarAdmin();
+  if (!admin_user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+  const { user_id, nueva_password } = await request.json();
+  if (!user_id || !nueva_password) return NextResponse.json({ error: 'Faltan datos' }, { status: 400 });
+  if (String(nueva_password).length < 6) {
+    return NextResponse.json({ error: 'La contraseña debe tener al menos 6 caracteres' }, { status: 400 });
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(user_id, { password: String(nueva_password) });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}
+
 // DELETE — revocar acceso
 export async function DELETE(request: Request) {
   const admin_user = await verificarAdmin();

@@ -7,14 +7,16 @@ import Sidebar from '@/app/components/Sidebar';
 
 interface Recordatorio { id: string; texto: string; fecha?: string; completado: boolean; }
 interface Precio { empresa: string; tipo: string; precio: number; provincia?: string; }
+interface Vencimiento { fecha: string; dias: number; tipo: string }
 
 interface Props {
   email: string; empresa: string; userId: string;
   gastoMes: number; gananciasMes: number; totalViajes: number; totalCamiones: number;
   recordatorios: Recordatorio[]; precios: Precio[]; preciosFuente?: string;
+  vencimiento?: Vencimiento | null;
 }
 
-export default function DashboardClient({ email, empresa, userId, gastoMes, gananciasMes, totalViajes, totalCamiones, recordatorios: initRecs, precios, preciosFuente }: Props) {
+export default function DashboardClient({ email, empresa, userId, gastoMes, gananciasMes, totalViajes, totalCamiones, recordatorios: initRecs, precios, preciosFuente, vencimiento }: Props) {
   const router = useRouter();
   const supabase = createClient();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -130,6 +132,40 @@ export default function DashboardClient({ email, empresa, userId, gastoMes, gana
         </div>
 
         <div className="p-4 md:p-7 max-w-6xl">
+
+          {/* Aviso de vencimiento del plan — aparece cuando faltan ≤ 5 días o ya venció */}
+          {vencimiento && vencimiento.dias <= 5 && (() => {
+            const v = vencimiento;
+            const vencido = v.dias <= 0;
+            const esDemo = v.tipo === 'demo';
+            const fechaFmt = new Date(v.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const titulo = vencido
+              ? (esDemo ? 'Tu período de prueba venció' : 'Tu plan venció')
+              : (esDemo ? 'Tu período de prueba está por terminar' : 'Tu plan está por vencer');
+            const cuerpo = vencido
+              ? `Venció el ${fechaFmt}. Renovalo para no perder el acceso a tus camiones y viajes.`
+              : v.dias === 1
+                ? `Vence mañana (${fechaFmt}).`
+                : `Vence en ${v.dias} días — el ${fechaFmt}.`;
+            return (
+              <div
+                className="mb-6 flex items-start gap-3 p-4 md:p-5 border-l-4"
+                style={{
+                  backgroundColor: vencido ? '#fff5f5' : '#fffaf0',
+                  borderColor: vencido ? '#e53935' : '#c8860a',
+                }}
+              >
+                <div className="text-2xl leading-none">{vencido ? '⛔' : '⏳'}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm mb-0.5" style={{ color: vencido ? '#c0392b' : '#a06a08' }}>{titulo}</div>
+                  <div className="text-sm text-ink-2">
+                    {cuerpo} Escribinos para renovar y seguir sin interrupciones.
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           <div className="bg-card border border-ink/10 p-6 md:p-8 mb-6">
             <div className="font-mono text-[10px] tracking-[3px] text-accent uppercase mb-3">// Bienvenido a FletIA</div>
             <h1 className="font-display text-4xl md:text-5xl font-black tracking-tight mb-3 leading-none text-ink">Hola, <span className="text-accent">{empresa}</span> 👋</h1>
