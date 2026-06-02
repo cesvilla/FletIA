@@ -2,25 +2,47 @@
 //
 // Dataset público "Precios en surtidor — Resolución 314/2016". Las estaciones
 // declaran sus precios y el Estado los publica vía API (CKAN datastore).
-// Consultamos el PROMEDIO NACIONAL por bandera para gasoil común (Grado 2) y
+// Consultamos el precio VIGENTE por bandera para gasoil común (Grado 2) y
 // premium (Grado 3), en AR$/litro.
 //
-// Detalle importante: el endpoint SQL se consulta por POST. Por GET, un WAF
-// delante del servidor corta la conexión al detectar patrones tipo SQL en la
-// URL (LIKE, paréntesis, etc.). Por POST funciona sin problemas.
+// ⚠️ IMPORTANTE (jun 2026): el endpoint `datastore_search_sql` quedó deshabilitado
+// (responde "Falta el valor" a cualquier SQL, incluso `SELECT 1`). Además el dataset
+// es un HISTÓRICO 2017→hoy: cada fila es un precio que entró en vigencia en una fecha.
+// Promediar TODAS las filas mezclaba precios de 2017 con 2026 y daba valores absurdos
+// (ej. YPF gasoil "promedio" $1269 cuando el real ronda $2200).
+//
+// Estrategia correcta, usando `datastore_search` (sin SQL, no bloqueado):
+//   1) traer las filas de cada bandera/producto ordenadas por fecha desc
+//   2) quedarnos con el precio MÁS RECIENTE de cada estación (su precio vigente)
+//   3) descartar estaciones que no actualizan hace > VENTANA_MESES (fantasma/cerradas)
+//   4) tomar la MEDIANA (robusta a outliers) como precio nacional de la bandera
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // Recurso "Precios vigentes en surtidor" (datastore_active = true)
 const RESOURCE_ID = '80ac25de-a44a-4445-9215-090cf55cfda5';
-const ENERGIA_SQL_URL = 'https://datos.energia.gob.ar/api/3/action/datastore_search_sql';
+const ENERGIA_SEARCH_URL = 'https://datos.energia.gob.ar/api/3/action/datastore_search';
 
-// Banderas que mostramos (nombre oficial → nombre lindo para la UI)
+// Solo consideramos precios declarados en los últimos N meses (precio realmente vigente)
+const VENTANA_MESES = 9;
+// Mínimo de estaciones para confiar en la mediana de una bandera/producto
+const MIN_ESTACIONES = 5;
+// Rango sanity-check para un precio de gasoil en AR$/litro (descarta datos corruptos)
+const PRECIO_MIN = 300;
+const PRECIO_MAX = 100000;
+
+// Banderas oficiales (nombre en el dataset → nombre lindo para la UI)
 const BANDERAS: Record<string, string> = {
   'YPF': 'YPF',
   'SHELL C.A.P.S.A.': 'Shell',
   'AXION': 'Axion',
   'PUMA': 'Puma',
+};
+
+// Productos oficiales (nombre en el dataset → tipo lindo para la UI)
+const PRODUCTOS: Record<string, string> = {
+  'Gas Oil Grado 2': 'Gasoil Común',
+  'Gas Oil Grado 3': 'Gasoil Premium',
 };
 
 export interface PrecioCombustible {
@@ -32,59 +54,117 @@ export interface PrecioCombustible {
 
 export type FuentePrecios = 'oficial' | 'cache' | 'referencia';
 
-// Valores de referencia (último promedio nacional conocido). Solo se usan si la
-// API oficial no responde. Se etiquetan como "referencia" en la UI para no
-// mentirle al usuario sobre la frescura del dato.
+// Valores de referencia (último promedio nacional conocido — mediana vigente jun-2026).
+// Solo se usan si la API oficial no responde, o por bandera/producto con muestra
+// insuficiente. Se etiquetan como "referencia" en la UI cuando se usan en bloque.
 const REFERENCIA: Omit<PrecioCombustible, 'fecha'>[] = [
-  { empresa: 'YPF',   tipo: 'Gasoil Común',   precio: 1269 },
-  { empresa: 'YPF',   tipo: 'Gasoil Premium', precio: 1443 },
-  { empresa: 'Shell', tipo: 'Gasoil Común',   precio: 1734 },
-  { empresa: 'Shell', tipo: 'Gasoil Premium', precio: 1947 },
-  { empresa: 'Axion', tipo: 'Gasoil Común',   precio: 1757 },
-  { empresa: 'Axion', tipo: 'Gasoil Premium', precio: 1947 },
-  { empresa: 'Puma',  tipo: 'Gasoil Común',   precio: 1643 },
-  { empresa: 'Puma',  tipo: 'Gasoil Premium', precio: 1843 },
+  { empresa: 'YPF',   tipo: 'Gasoil Común',   precio: 2199 },
+  { empresa: 'YPF',   tipo: 'Gasoil Premium', precio: 2364 },
+  { empresa: 'Shell', tipo: 'Gasoil Común',   precio: 2199 },
+  { empresa: 'Shell', tipo: 'Gasoil Premium', precio: 2489 },
+  { empresa: 'Axion', tipo: 'Gasoil Común',   precio: 2269 },
+  { empresa: 'Axion', tipo: 'Gasoil Premium', precio: 2479 },
+  { empresa: 'Puma',  tipo: 'Gasoil Común',   precio: 2200 },
+  { empresa: 'Puma',  tipo: 'Gasoil Premium', precio: 2455 },
 ];
 
-// Consulta el promedio nacional real por bandera. Devuelve null si falla.
-export async function fetchPreciosOficiales(): Promise<Omit<PrecioCombustible, 'fecha'>[] | null> {
-  const banderas = Object.keys(BANDERAS).map(b => `'${b}'`).join(', ');
-  const sql =
-    `SELECT empresabandera, producto, round(avg(precio)::numeric, 0) AS precio ` +
-    `FROM "${RESOURCE_ID}" ` +
-    `WHERE producto IN ('Gas Oil Grado 2', 'Gas Oil Grado 3') ` +
-    `AND empresabandera IN (${banderas}) ` +
-    `GROUP BY empresabandera, producto`;
+function refDe(empresa: string, tipo: string): number | null {
+  return REFERENCIA.find(r => r.empresa === empresa && r.tipo === tipo)?.precio ?? null;
+}
+
+function mediana(nums: number[]): number {
+  if (nums.length === 0) return 0;
+  const s = [...nums].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+}
+
+// Trae el precio vigente (mediana nacional) de una bandera/producto.
+// Devuelve null si no hay muestra suficiente o la API falla.
+async function precioVigente(
+  banderaOficial: string,
+  productoOficial: string,
+  desdeISO: string,
+): Promise<number | null> {
+  const filters = encodeURIComponent(JSON.stringify({
+    producto: productoOficial,
+    empresabandera: banderaOficial,
+  }));
+  // Orden por índice de tiempo desc → las filas más nuevas primero, así el primer
+  // registro de cada estación es su precio vigente. Pedimos solo los campos necesarios.
+  const url =
+    `${ENERGIA_SEARCH_URL}?resource_id=${RESOURCE_ID}` +
+    `&filters=${filters}` +
+    `&fields=precio,fecha_vigencia,idempresa` +
+    `&sort=indice_tiempo desc` +
+    `&limit=10000`;
 
   try {
-    const res = await fetch(ENERGIA_SQL_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sql }),
+    const res = await fetch(url, {
       signal: AbortSignal.timeout(12000),
-      // El dato cambia a lo sumo una vez al día: cacheamos a nivel fetch también.
+      // El dato cambia a lo sumo una vez al día.
       next: { revalidate: 60 * 60 * 6 },
     });
     if (!res.ok) return null;
-
     const data = await res.json();
     const records: any[] = data?.result?.records;
     if (!Array.isArray(records) || records.length === 0) return null;
 
-    const rows = records
-      .map(r => ({
-        empresa: BANDERAS[r.empresabandera] ?? r.empresabandera,
-        tipo: String(r.producto).includes('Grado 3') ? 'Gasoil Premium' : 'Gasoil Común',
-        precio: Math.round(Number(r.precio)),
-      }))
-      .filter(r => Number.isFinite(r.precio) && r.precio > 0)
-      // Orden estable: por empresa y con común antes que premium
-      .sort((a, b) => a.empresa.localeCompare(b.empresa) || a.tipo.localeCompare(b.tipo));
+    // Precio vigente por estación: primer registro (más reciente) dentro de la ventana.
+    const porEstacion = new Map<string, number>();
+    for (const r of records) {
+      const fecha = String(r.fecha_vigencia || '');
+      if (fecha < desdeISO) continue;                 // fuera de ventana → estación inactiva
+      const id = String(r.idempresa ?? '');
+      if (porEstacion.has(id)) continue;              // ya tomamos su precio más reciente
+      const precio = Number(r.precio);
+      if (Number.isFinite(precio) && precio >= PRECIO_MIN && precio <= PRECIO_MAX) {
+        porEstacion.set(id, precio);
+      }
+    }
 
-    return rows.length > 0 ? rows : null;
+    if (porEstacion.size < MIN_ESTACIONES) return null;
+    const med = mediana([...porEstacion.values()]);
+    return med >= PRECIO_MIN && med <= PRECIO_MAX ? med : null;
   } catch {
     return null;
   }
+}
+
+// Consulta el precio nacional vigente real por bandera. Devuelve null si TODO falla.
+// Para banderas/productos con muestra insuficiente, completa con el valor de referencia
+// (así el usuario nunca ve un precio en $0 o ausente).
+export async function fetchPreciosOficiales(): Promise<Omit<PrecioCombustible, 'fecha'>[] | null> {
+  const desde = new Date();
+  desde.setMonth(desde.getMonth() - VENTANA_MESES);
+  const desdeISO = desde.toISOString().slice(0, 10);
+
+  const combos = Object.entries(BANDERAS).flatMap(([banderaOf, banderaUI]) =>
+    Object.entries(PRODUCTOS).map(([prodOf, tipoUI]) => ({ banderaOf, banderaUI, prodOf, tipoUI })),
+  );
+
+  const resultados = await Promise.all(
+    combos.map(async (c) => {
+      const precio = await precioVigente(c.banderaOf, c.prodOf, desdeISO);
+      return { empresa: c.banderaUI, tipo: c.tipoUI, precio };
+    }),
+  );
+
+  // Si NINGUNA bandera/producto trajo dato real, consideramos caída la API.
+  const conDatoReal = resultados.filter(r => r.precio != null).length;
+  if (conDatoReal === 0) return null;
+
+  // Completar huecos con referencia y ordenar de forma estable.
+  const rows = resultados
+    .map(r => ({
+      empresa: r.empresa,
+      tipo: r.tipo,
+      precio: r.precio ?? refDe(r.empresa, r.tipo) ?? 0,
+    }))
+    .filter(r => r.precio > 0)
+    .sort((a, b) => a.empresa.localeCompare(b.empresa) || a.tipo.localeCompare(b.tipo));
+
+  return rows.length > 0 ? rows : null;
 }
 
 // Devuelve los precios de hoy. Estrategia:
