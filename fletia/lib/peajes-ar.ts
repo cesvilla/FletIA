@@ -20,6 +20,25 @@
 
 export const RADIO_DETECCION_KM = 1.8; // Radio de detección en km
 
+// ─── Control de actualización de tarifas ─────────────────────────────────────
+// Las tarifas argentinas se ajustan cada 1-3 meses. Marcamos cuándo se revisaron
+// por última vez y a los cuántos días consideramos que están "vencidas" para
+// avisarle al owner (en /admin y en el monitoreo) que toca revisarlas.
+export const PEAJES_ACTUALIZADO = '2026-05-01'; // YYYY-MM-DD — última revisión de tarifas
+export const PEAJES_REVISION_DIAS = 90;          // recordar revisar cada trimestre
+
+export interface EstadoPeajes {
+  fecha: string;        // fecha de última actualización (YYYY-MM-DD)
+  diasDesde: number;    // días transcurridos desde esa fecha
+  desactualizado: boolean; // true si pasó el umbral de revisión
+}
+
+export function estadoActualizacionPeajes(hoy: Date = new Date()): EstadoPeajes {
+  const base = new Date(PEAJES_ACTUALIZADO + 'T00:00:00');
+  const diasDesde = Math.max(0, Math.floor((hoy.getTime() - base.getTime()) / 86_400_000));
+  return { fecha: PEAJES_ACTUALIZADO, diasDesde, desactualizado: diasDesde > PEAJES_REVISION_DIAS };
+}
+
 export interface PlazaPeaje {
   id: string;
   nombre: string;

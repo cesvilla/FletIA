@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getPreciosDeHoy } from '@/lib/precios';
+import { checkApis, type ApiHealth } from '@/lib/health';
+import { estadoActualizacionPeajes } from '@/lib/peajes-ar';
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -122,6 +124,34 @@ function emailAdmin(acceso: any, diasAviso: number, fechaFormateada: string) {
   `;
 }
 
+function emailSaludApis(apis: ApiHealth[], peajesVencidos: { fecha: string; diasDesde: number } | null) {
+  const fila = (a: ApiHealth) => `
+    <tr style="border-bottom: 1px solid #f0ede8;">
+      <td style="padding: 8px 0; color: #1a1714;">${a.ok ? '🟢' : '🔴'} ${a.nombre}${a.critico ? ' <span style="color:#d4440c;font-size:11px;">(crítica)</span>' : ''}</td>
+      <td style="padding: 8px 0; text-align: right; font-family: monospace; color: #8a8278;">${a.status ?? '—'} · ${a.ms}ms${a.detalle ? ` · ${a.detalle}` : ''}</td>
+    </tr>`;
+  const filaPeajes = peajesVencidos ? `
+    <tr style="border-bottom: 1px solid #f0ede8;">
+      <td style="padding: 8px 0; color: #1a1714;">🟠 Tarifas de peajes</td>
+      <td style="padding: 8px 0; text-align: right; font-family: monospace; color: #c8860a;">revisar — ${peajesVencidos.diasDesde}d desde ${peajesVencidos.fecha}</td>
+    </tr>` : '';
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto; background: #f0ede8; padding: 32px;">
+      <div style="background: #1a1714; padding: 20px 28px; margin-bottom: 24px;">
+        <span style="font-size: 28px; font-weight: 900; color: #fff;">Flet<span style="color: #d4440c;">IA</span></span>
+        <span style="color: rgba(255,255,255,0.4); font-size: 12px; margin-left: 12px; font-family: monospace;">/ Estado de APIs</span>
+      </div>
+      <div style="background: #fff; padding: 28px; border: 1px solid rgba(26,23,20,0.1);">
+        <h2 style="margin: 0 0 16px; font-size: 18px; color: #d4440c;">⚠️ Hay servicios que requieren atención</h2>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          ${apis.map(fila).join('')}
+          ${filaPeajes}
+        </table>
+        <p style="margin: 18px 0 0; font-size: 12px; color: #8a8278;">Chequeo automático del cron diario de FletIA.</p>
+      </div>
+    </div>`;
+}
+
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -140,6 +170,27 @@ export async function GET(request: Request) {
     preciosFuente = 'error';
   }
 
+  // Monitoreo de APIs externas + antigüedad de tarifas de peajes. Si algo crítico
+  // está caído o los peajes están vencidos, avisamos al owner por mail.
+  let salud: { todoOk: boolean; hayCriticoCaido: boolean; apis: ApiHealth[] } | null = null;
+  try {
+    salud = await checkApis();
+    const peajes = estadoActualizacionPeajes();
+    const peajesVencidos = peajes.desactualizado ? { fecha: peajes.fecha, diasDesde: peajes.diasDesde } : null;
+    if (salud.hayCriticoCaido || !salud.todoOk || peajesVencidos) {
+      await resend.emails.send({
+        from: 'FletIA <onboarding@resend.dev>',
+        to: ADMIN_EMAIL,
+        subject: salud.hayCriticoCaido
+          ? '🔴 FletIA — API CRÍTICA caída'
+          : '⚠️ FletIA — chequeo de servicios',
+        html: emailSaludApis(salud.apis, peajesVencidos),
+      });
+    }
+  } catch {
+    // el monitoreo es best-effort: nunca interrumpe el resto del cron
+  }
+
   const hoy = new Date();
   const fechaLimiteMin = new Date(hoy);
   fechaLimiteMin.setDate(hoy.getDate() + DIAS_AVISO);
@@ -156,7 +207,10 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!proximos || proximos.length === 0) {
-    return NextResponse.json({ ok: true, enviados: 0, precios: preciosFuente, mensaje: 'Sin vencimientos próximos' });
+    return NextResponse.json({
+      ok: true, enviados: 0, precios: preciosFuente, mensaje: 'Sin vencimientos próximos',
+      apisOk: salud?.todoOk ?? null, apisCaidas: salud?.apis.filter(a => !a.ok).map(a => a.nombre) ?? [],
+    });
   }
 
   const enviados: string[] = [];
@@ -193,5 +247,8 @@ export async function GET(request: Request) {
     enviados.push(acceso.email);
   }
 
-  return NextResponse.json({ ok: true, enviados: enviados.length, precios: preciosFuente, usuarios: enviados });
+  return NextResponse.json({
+    ok: true, enviados: enviados.length, precios: preciosFuente, usuarios: enviados,
+    apisOk: salud?.todoOk ?? null, apisCaidas: salud?.apis.filter(a => !a.ok).map(a => a.nombre) ?? [],
+  });
 }

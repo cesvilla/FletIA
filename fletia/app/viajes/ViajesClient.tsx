@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import dynamic from 'next/dynamic';
 import Sidebar from '@/app/components/Sidebar';
+import * as rent from '@/lib/rentabilidad';
 
 const MapaRuta = dynamic(() => import('./MapaRuta'), { ssr: false, loading: () => (
   <div style={{ height: 300, backgroundColor: '#e8e3db', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -489,7 +490,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     : 0;
 
   const costoTotalReal = resultado
-    ? resultado.costoTotal + peajesTotal + costoConductor + costoMantenimiento
+    ? rent.costoTotalReal(resultado.costoTotal, peajesTotal, costoConductor, costoMantenimiento)
     : 0;
   // Compatibilidad: nombre viejo usado en el desglose (= combustible + peajes)
   const costoConPeajes = resultado ? resultado.costoTotal + peajesTotal : 0;
@@ -497,24 +498,19 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   const hayCostosExtra = peajesTotal > 0 || costoConductor > 0 || costoMantenimiento > 0;
 
   // Precio mínimo de flete para alcanzar el margen objetivo
-  const precioMinimo = costoTotalReal > 0
-    ? Math.round(costoTotalReal / (1 - margenObjetivo / 100))
-    : 0;
+  const precioMinimo = rent.precioMinimoFlete(costoTotalReal, margenObjetivo);
 
   // Rentabilidad real (flete vs costo total real)
-  const margenNeto = resultado && form.flete_cobrado
-    ? (((parseFloat(form.flete_cobrado) - costoTotalReal) / parseFloat(form.flete_cobrado)) * 100).toFixed(1)
+  const margenNetoNum = resultado && form.flete_cobrado
+    ? rent.margenNetoPct(parseFloat(form.flete_cobrado), costoTotalReal)
     : null;
+  const margenNeto = margenNetoNum != null ? margenNetoNum.toFixed(1) : null;
 
   const gananciaNeta = resultado && form.flete_cobrado
-    ? parseFloat(form.flete_cobrado) - costoTotalReal
+    ? rent.gananciaNeta(parseFloat(form.flete_cobrado), costoTotalReal)
     : null;
 
-  const colorMargen = margenNeto
-    ? parseFloat(margenNeto) > 25 ? '#1a6b3a'
-      : parseFloat(margenNeto) > 10 ? '#c8860a'
-      : '#d4440c'
-    : '#8a8278';
+  const colorMargen = rent.colorMargen(margenNetoNum);
 
   return (
     <div className="flex min-h-screen" style={{ backgroundColor: '#f0ede8' }}>

@@ -72,11 +72,40 @@ function refDe(empresa: string, tipo: string): number | null {
   return REFERENCIA.find(r => r.empresa === empresa && r.tipo === tipo)?.precio ?? null;
 }
 
-function mediana(nums: number[]): number {
+export function mediana(nums: number[]): number {
   if (nums.length === 0) return 0;
   const s = [...nums].sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
   return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+}
+
+// Registro crudo del datastore (solo los campos que usamos).
+export interface RegistroPrecio {
+  precio: number | string;
+  fecha_vigencia?: string;
+  idempresa?: string | number;
+}
+
+// Precio nacional vigente (mediana) a partir de registros crudos del datastore.
+// Asume `records` ordenado por fecha desc → el primero de cada estación es su precio
+// vigente. Descarta registros fuera de la ventana (más viejos que `desdeISO`) y
+// precios fuera de rango. Devuelve null si la muestra es menor a MIN_ESTACIONES.
+// Función PURA (sin red) para poder testearla.
+export function medianaVigente(records: RegistroPrecio[], desdeISO: string): number | null {
+  const porEstacion = new Map<string, number>();
+  for (const r of records) {
+    const fecha = String(r.fecha_vigencia || '');
+    if (fecha < desdeISO) continue;                 // fuera de ventana → estación inactiva
+    const id = String(r.idempresa ?? '');
+    if (porEstacion.has(id)) continue;              // ya tomamos su precio más reciente
+    const precio = Number(r.precio);
+    if (Number.isFinite(precio) && precio >= PRECIO_MIN && precio <= PRECIO_MAX) {
+      porEstacion.set(id, precio);
+    }
+  }
+  if (porEstacion.size < MIN_ESTACIONES) return null;
+  const med = mediana([...porEstacion.values()]);
+  return med >= PRECIO_MIN && med <= PRECIO_MAX ? med : null;
 }
 
 // Trae el precio vigente (mediana nacional) de una bandera/producto.
@@ -110,22 +139,7 @@ async function precioVigente(
     const records: any[] = data?.result?.records;
     if (!Array.isArray(records) || records.length === 0) return null;
 
-    // Precio vigente por estación: primer registro (más reciente) dentro de la ventana.
-    const porEstacion = new Map<string, number>();
-    for (const r of records) {
-      const fecha = String(r.fecha_vigencia || '');
-      if (fecha < desdeISO) continue;                 // fuera de ventana → estación inactiva
-      const id = String(r.idempresa ?? '');
-      if (porEstacion.has(id)) continue;              // ya tomamos su precio más reciente
-      const precio = Number(r.precio);
-      if (Number.isFinite(precio) && precio >= PRECIO_MIN && precio <= PRECIO_MAX) {
-        porEstacion.set(id, precio);
-      }
-    }
-
-    if (porEstacion.size < MIN_ESTACIONES) return null;
-    const med = mediana([...porEstacion.values()]);
-    return med >= PRECIO_MIN && med <= PRECIO_MAX ? med : null;
+    return medianaVigente(records, desdeISO);
   } catch {
     return null;
   }

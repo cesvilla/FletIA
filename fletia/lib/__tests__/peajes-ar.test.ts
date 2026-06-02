@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { calcularPeajesEnRuta, PEAJES_AR, RADIO_DETECCION_KM } from '../peajes-ar';
+import {
+  calcularPeajesEnRuta, PEAJES_AR, RADIO_DETECCION_KM,
+  estadoActualizacionPeajes, PEAJES_ACTUALIZADO, PEAJES_REVISION_DIAS,
+} from '../peajes-ar';
 
 describe('calcularPeajesEnRuta', () => {
   it('no detecta peajes en una ruta vacía / sin plazas cercanas', () => {
@@ -77,5 +80,31 @@ describe('calcularPeajesEnRuta', () => {
   it('el radio de detección por defecto es razonable (entre 1 y 3 km)', () => {
     expect(RADIO_DETECCION_KM).toBeGreaterThanOrEqual(1);
     expect(RADIO_DETECCION_KM).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('estadoActualizacionPeajes', () => {
+  it('no está desactualizado dentro del trimestre', () => {
+    const base = new Date(PEAJES_ACTUALIZADO + 'T00:00:00');
+    const dentro = new Date(base);
+    dentro.setDate(base.getDate() + PEAJES_REVISION_DIAS - 1);
+    const e = estadoActualizacionPeajes(dentro);
+    expect(e.desactualizado).toBe(false);
+    expect(e.fecha).toBe(PEAJES_ACTUALIZADO);
+  });
+
+  it('marca desactualizado al pasar el umbral de revisión', () => {
+    const base = new Date(PEAJES_ACTUALIZADO + 'T00:00:00');
+    const pasado = new Date(base);
+    pasado.setDate(base.getDate() + PEAJES_REVISION_DIAS + 5);
+    const e = estadoActualizacionPeajes(pasado);
+    expect(e.desactualizado).toBe(true);
+    expect(e.diasDesde).toBeGreaterThan(PEAJES_REVISION_DIAS);
+  });
+
+  it('nunca devuelve días negativos (fecha anterior a la actualización)', () => {
+    const antes = new Date('2020-01-01T00:00:00');
+    const e = estadoActualizacionPeajes(antes);
+    expect(e.diasDesde).toBeGreaterThanOrEqual(0);
   });
 });

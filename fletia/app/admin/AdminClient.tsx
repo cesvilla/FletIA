@@ -25,8 +25,23 @@ export default function AdminClient() {
   const [mensaje, setMensaje] = useState<{ texto: string; tipo: 'ok' | 'error' } | null>(null);
   const [resetUser, setResetUser] = useState<string | null>(null);
   const [nuevaClave, setNuevaClave] = useState('');
+  const [salud, setSalud] = useState<any>(null);
+  const [chequeando, setChequeando] = useState(false);
 
   useEffect(() => { cargar(); }, []);
+
+  async function chequearApis() {
+    setChequeando(true);
+    try {
+      const res = await fetch('/api/health');
+      const data = await res.json();
+      if (data.apis) setSalud(data);
+      else setMensaje({ texto: `Error al chequear: ${data.error || 'desconocido'}`, tipo: 'error' });
+    } catch {
+      setMensaje({ texto: 'Error de red al chequear APIs', tipo: 'error' });
+    }
+    setChequeando(false);
+  }
 
   async function cargar() {
     setLoading(true);
@@ -163,6 +178,48 @@ export default function AdminClient() {
               <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: '3rem', fontWeight: 900, color: k.color, lineHeight: 1 }}>{k.val}</div>
             </div>
           ))}
+        </div>
+
+        {/* Estado de servicios externos + tarifas de peajes */}
+        <div style={{ backgroundColor: '#fff', border: '1px solid rgba(26,23,20,0.1)', marginBottom: 32 }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(26,23,20,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', letterSpacing: '2px', color: '#1a1714', fontWeight: 700 }}>
+              🩺 ESTADO DE SERVICIOS
+            </div>
+            <button
+              onClick={chequearApis}
+              disabled={chequeando}
+              style={{
+                fontFamily: 'DM Mono, monospace', fontSize: 10, letterSpacing: '1px',
+                padding: '6px 14px', border: '1px solid rgba(26,23,20,0.2)', backgroundColor: chequeando ? '#f0ede8' : '#1a1714',
+                color: chequeando ? '#8a8278' : '#fff', cursor: chequeando ? 'default' : 'pointer',
+              }}
+            >
+              {chequeando ? 'CHEQUEANDO…' : 'REVISAR AHORA'}
+            </button>
+          </div>
+          {salud ? (
+            <div style={{ padding: '8px 20px' }}>
+              {salud.apis.map((a: any) => (
+                <div key={a.nombre} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid rgba(26,23,20,0.05)', fontSize: 13, gap: 12 }}>
+                  <span style={{ color: '#1a1714' }}>{a.ok ? '🟢' : '🔴'} {a.nombre}{a.critico && !a.ok ? ' ⚠️' : ''}</span>
+                  <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: a.ok ? '#8a8278' : '#d4440c', textAlign: 'right' }}>{a.status ?? '—'} · {a.ms}ms{a.detalle ? ` · ${a.detalle}` : ''}</span>
+                </div>
+              ))}
+              {salud.peajes && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', fontSize: 13, gap: 12 }}>
+                  <span style={{ color: '#1a1714' }}>{salud.peajes.desactualizado ? '🟠' : '🟢'} Tarifas de peajes</span>
+                  <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: salud.peajes.desactualizado ? '#c8860a' : '#8a8278', textAlign: 'right' }}>
+                    {salud.peajes.desactualizado ? 'revisar' : 'ok'} — {salud.peajes.diasDesde}d desde {salud.peajes.fecha}
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ padding: '16px 20px', fontFamily: 'DM Mono, monospace', fontSize: 11, color: '#8a8278', lineHeight: 1.6 }}>
+              Tocá <strong>“Revisar ahora”</strong> para pinguear las APIs externas (combustible, rutas, tráfico, clima, geocode) y ver si las tarifas de peajes están al día. El cron diario también avisa por mail si algo crítico se cae.
+            </div>
+          )}
         </div>
 
         {loading ? (
