@@ -133,8 +133,8 @@ export default function DashboardClient({ email, empresa, userId, gastoMes, gana
 
         <div className="p-4 md:p-7 max-w-6xl">
 
-          {/* Aviso de vencimiento del plan — aparece cuando faltan ≤ 5 días o ya venció */}
-          {vencimiento && vencimiento.dias <= 5 && (() => {
+          {/* Aviso de vencimiento del plan — aparece cuando faltan ≤ 2 días o ya venció */}
+          {vencimiento && vencimiento.dias <= 2 && (() => {
             const v = vencimiento;
             const vencido = v.dias <= 0;
             const esDemo = v.tipo === 'demo';
