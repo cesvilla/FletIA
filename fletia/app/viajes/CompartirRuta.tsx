@@ -64,6 +64,22 @@ export default function CompartirRuta({ mapaData, climaRuta, traficoRuta }: Prop
     if (!mapaData?.polyline?.length) { setError('Primero calculá una ruta'); return; }
     setCreando(true);
 
+    // Ciudades del camino (una sola vez; se guarda en el snapshot)
+    let ciudades: string[] = [];
+    try {
+      const rc = await fetch('/api/ciudades-ruta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          polyline: mapaData.polyline,
+          origenNombre: mapaData.origen.nombre,
+          destinoNombre: mapaData.destino.nombre,
+        }),
+      });
+      const jc = await rc.json();
+      ciudades = jc.ciudades || [];
+    } catch { /* si falla, el link igual se crea sin la lista */ }
+
     const snapshot = {
       origen: mapaData.origen,
       destino: mapaData.destino,
@@ -71,6 +87,7 @@ export default function CompartirRuta({ mapaData, climaRuta, traficoRuta }: Prop
       duracionMin: mapaData.duracionMin,
       polyline: mapaData.polyline,
       peajes: mapaData.peajes,
+      ciudades,
       clima: climaRuta ? {
         puntos: (climaRuta.puntos || []).map((p: any) => ({
           nombre: p.nombre, temp: p.temp, condicion: p.condicion, emoji: p.emoji,

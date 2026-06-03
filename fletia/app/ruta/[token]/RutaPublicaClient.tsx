@@ -19,6 +19,7 @@ interface Snapshot {
   km: number;
   duracionMin?: number;
   polyline: [number, number][];
+  ciudades?: string[];
   peajes?: { plazas: Array<{ nombre: string; ruta: string; precio: number }>; total: number };
   clima?: { puntos: Array<{ nombre: string; temp: number; condicion: string; emoji: string; viento: number; lluvia: number; impactoPct: number }>; tieneAlertas: boolean };
   trafico?: { disponible: boolean; totalIncidentes: number; demoraTotal: number; cortes: Array<{ tipo: string; emoji: string; zona: string; ubicacion: string }>; resumenTipos: Array<{ tipo: string; emoji: string; cantidad: number }> };
@@ -143,6 +144,24 @@ export default function RutaPublicaClient({ token }: { token: string }) {
             El botón verde manda tu <strong>ubicación actual</strong> al toque.<br />
             💡 Para que te sigan <strong>en vivo</strong> todo el viaje: en ese mismo chat de WhatsApp tocá <strong>📎 → Ubicación → Compartir en tiempo real</strong> y elegí la duración. Funciona aunque bloquees el celular.
           </div>
+        )}
+
+        {/* Ciudades del camino */}
+        {s.ciudades && s.ciudades.length > 0 && (
+          <Seccion titulo={`🛣️ Ciudades en el camino (${s.ciudades.length})`}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+              {s.ciudades.map((c, i) => (
+                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{
+                    backgroundColor: i === 0 ? '#1a6b3a' : i === s.ciudades!.length - 1 ? '#d4440c' : '#f0ede8',
+                    color: i === 0 || i === s.ciudades!.length - 1 ? '#fff' : '#1a1714',
+                    border: '1px solid rgba(26,23,20,0.1)', borderRadius: 20, padding: '5px 12px', fontSize: 13, fontWeight: 600,
+                  }}>{c}</span>
+                  {i < s.ciudades!.length - 1 && <span style={{ color: '#8a8278', fontSize: 14 }}>›</span>}
+                </span>
+              ))}
+            </div>
+          </Seccion>
         )}
 
         {/* Peajes */}
