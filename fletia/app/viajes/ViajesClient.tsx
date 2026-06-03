@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import dynamic from 'next/dynamic';
 import Sidebar from '@/app/components/Sidebar';
 import * as rent from '@/lib/rentabilidad';
+import CompartirRuta from './CompartirRuta';
 
 const MapaRuta = dynamic(() => import('./MapaRuta'), { ssr: false, loading: () => (
   <div style={{ height: 300, backgroundColor: '#e8e3db', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1054,6 +1055,9 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         </div>
                       </div>
                     )}
+
+                    {/* Compartir ruta con el chofer (link de solo lectura) */}
+                    <CompartirRuta mapaData={mapaData} climaRuta={climaRuta} traficoRuta={traficoRuta} />
 
                     {/* Km y Peso */}
                     <div className="grid grid-cols-2 gap-3">

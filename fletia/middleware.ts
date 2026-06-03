@@ -13,6 +13,7 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some(p => pathname === p || pathname === p + '/') ||
+    pathname.startsWith('/ruta/') ||  // links de ruta para choferes (solo lectura, sin login)
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api');
 
