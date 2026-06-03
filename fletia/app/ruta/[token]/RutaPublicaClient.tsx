@@ -36,6 +36,8 @@ const BG = '#f0ede8';
 export default function RutaPublicaClient({ token }: { token: string }) {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState(false);
+  const [ubicando, setUbicando] = useState(false);
+  const [ubicError, setUbicError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/ruta-publica?token=${encodeURIComponent(token)}`)
@@ -55,7 +57,33 @@ export default function RutaPublicaClient({ token }: { token: string }) {
   const horas = s.duracionMin ? `${Math.floor(s.duracionMin / 60)}h ${String(s.duracionMin % 60).padStart(2, '0')}m` : null;
 
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${s.origen.lat},${s.origen.lon}&destination=${s.destino.lat},${s.destino.lon}&travelmode=driving`;
-  const ubicacionMsg = `Hola! Te comparto mi ubicación en vivo del viaje ${s.origen.nombre.split(',')[0]} → ${s.destino.nombre.split(',')[0]}. (Para enviarla: tocá 📎 → Ubicación → Compartir en tiempo real)`;
+
+  // Captura el GPS del chofer y abre WhatsApp con un PIN real de su posición actual.
+  // (WhatsApp no permite iniciar la ubicación por URL, así que mandamos un link de
+  // Google Maps con sus coordenadas — que llega clickeable al chat del dueño.)
+  function enviarUbicacion() {
+    if (!data?.owner_whatsapp) return;
+    if (!('geolocation' in navigator)) { setUbicError('Tu celular no permite compartir ubicación.'); return; }
+    setUbicando(true);
+    setUbicError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const pin = `https://maps.google.com/?q=${latitude},${longitude}`;
+        const msg = `📍 Mi ubicación ahora — viaje ${s.origen.nombre.split(',')[0]} → ${s.destino.nombre.split(',')[0]}\n${pin}`;
+        // location.href (no window.open) para que no lo bloquee el navegador móvil.
+        window.location.href = linkWhatsapp(data.owner_whatsapp!, msg);
+        setUbicando(false);
+      },
+      (err) => {
+        setUbicError(err.code === 1
+          ? 'Tenés que permitir el acceso a tu ubicación para compartirla.'
+          : 'No pudimos obtener tu ubicación. Probá de nuevo al aire libre.');
+        setUbicando(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: BG, paddingBottom: 40 }}>
@@ -99,15 +127,21 @@ export default function RutaPublicaClient({ token }: { token: string }) {
             🧭 Navegar con Google Maps
           </a>
           {data.owner_whatsapp && (
-            <a href={linkWhatsapp(data.owner_whatsapp, ubicacionMsg)} target="_blank" rel="noopener noreferrer"
-              style={btn('#25D366')}>
-              📍 Compartir mi ubicación con la empresa
-            </a>
+            <button onClick={enviarUbicacion} disabled={ubicando}
+              style={{ ...btn('#25D366'), border: 'none', width: '100%', cursor: ubicando ? 'default' : 'pointer', opacity: ubicando ? 0.7 : 1 }}>
+              {ubicando ? '📍 Obteniendo tu ubicación…' : '📍 Enviar mi ubicación a la empresa'}
+            </button>
           )}
         </div>
+        {ubicError && (
+          <div style={{ fontSize: 13, color: '#d4440c', backgroundColor: '#fff5f5', border: '1px solid rgba(212,68,12,0.2)', padding: '10px 14px', borderRadius: 6, marginBottom: 12 }}>
+            {ubicError}
+          </div>
+        )}
         {data.owner_whatsapp && (
           <div style={{ fontSize: 12, color: '#8a8278', backgroundColor: '#fff', border: '1px solid rgba(26,23,20,0.08)', padding: '10px 14px', borderRadius: 6, marginBottom: 20, lineHeight: 1.5 }}>
-            💡 Para que te sigan en tiempo real: abrí el chat con el botón verde, después tocá <strong>📎 → Ubicación → Compartir en tiempo real</strong> y elegí la duración. Funciona aunque bloquees el celular.
+            El botón verde manda tu <strong>ubicación actual</strong> al toque.<br />
+            💡 Para que te sigan <strong>en vivo</strong> todo el viaje: en ese mismo chat de WhatsApp tocá <strong>📎 → Ubicación → Compartir en tiempo real</strong> y elegí la duración. Funciona aunque bloquees el celular.
           </div>
         )}
 
