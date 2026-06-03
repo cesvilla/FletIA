@@ -154,8 +154,8 @@ export default function LandingPage() {
                 <div className="calc-card">
                   <div className="row"><span className="lbl">Distancia</span><span className="val">782 km</span></div>
                   <div className="row"><span className="lbl">Consumo estimado</span><span className="val">253 L · <span className="a">3,09 km/L</span></span></div>
-                  <div className="row"><span className="lbl">Gasoil ($/L)</span><span className="val">$1.187</span></div>
-                  <div className="row total"><span className="lbl">Costo combustible</span><span className="val">$300.411</span></div>
+                  <div className="row"><span className="lbl">Gasoil ($/L)</span><span className="val">$2.199</span></div>
+                  <div className="row total"><span className="lbl">Costo combustible</span><span className="val">$556.347</span></div>
                   <span className="rentab">▲ rentable · margen 22%</span>
                 </div>
               </div>
@@ -187,30 +187,33 @@ export default function LandingPage() {
             </div>
             <div className="plan featured">
               <span className="ribbon">Recomendado</span>
-              <div className="pname">Pro</div>
-              <div className="pprice">$40.000<span className="per">/ mes</span></div>
-              <div className="psub">Para transportistas y PyMEs que quieren controlar cada flete.</div>
+              <div className="pname">Básico</div>
+              <div className="pprice">$20.000<span className="per">/ camión / mes</span></div>
+              <div className="psub">De 1 a 3 camiones. Ideal para transportistas independientes.</div>
               <ul className="feats">
-                <li>Hasta 10 camiones</li>
+                <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Hasta 3 camiones</li>
                 <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Viajes ilimitados</li>
                 <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> IA que aprende por camión</li>
                 <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Reportes y rentabilidad</li>
                 <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Soporte por WhatsApp</li>
               </ul>
-              <Link href="/registro" className="btn primary lg">⚡ Empezar ahora</Link>
+              <Link href="/registro" className="btn primary lg">Empezar ahora</Link>
             </div>
             <div className="plan">
-              <div className="pname">TU FLOTA</div>
-              <div className="pprice compact">Personalizada</div>
-              <div className="psub" style={{textAlign:'center'}}>Para empresas con flotas grandes y necesidades a medida.</div>
+              <div className="pname">Flota</div>
+              <div className="pprice">$15.000<span className="per">/ camión / mes</span></div>
+              <div className="psub">De 4 a 10 camiones. Precio por volumen para PyMEs.</div>
               <ul className="feats">
-                <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Camiones ilimitados</li>
-                <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Múltiples usuarios y permisos</li>
-                <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Reportes a medida</li>
-                <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Soporte dedicado</li>
+                <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Hasta 10 camiones</li>
+                <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Todo lo del plan Básico</li>
+                <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Exportar por camión (Excel/PDF)</li>
+                <li><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Soporte prioritario</li>
               </ul>
-              <a href="mailto:hola@flet-ia.com" className="btn ghost lg">Hablar con ventas</a>
+              <Link href="/registro" className="btn ghost lg">Empezar ahora</Link>
             </div>
+          </div>
+          <div className="reveal" style={{ textAlign: 'center', marginTop: 24, fontFamily: 'DM Mono, monospace', fontSize: '0.72rem', color: 'rgba(240,237,232,0.3)', letterSpacing: '0.5px' }}>
+            +10 camiones? <a href="mailto:hola@flet-ia.com" style={{ color: 'rgb(235,75,21)', textDecoration: 'none' }}>Escribinos</a> y armamos un plan a medida.
           </div>
         </section>
 
