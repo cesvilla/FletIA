@@ -6,6 +6,11 @@ import { createClient } from '@/lib/supabase/client';
 import { Camion, NuevoCamion } from '@/lib/types';
 import Sidebar from '@/app/components/Sidebar';
 import { estadoBloqueo, VENTANA_GRACIA_HORAS } from '@/lib/camion-lock';
+import { linkWhatsapp } from '@/lib/whatsapp';
+
+// WhatsApp de soporte de FletIA (donde llega "Reportar error grave").
+// Formato internacional con el 9 de móvil: 54 9 381 5657595.
+const SOPORTE_WHATSAPP = '5493815657595';
 
 interface Props {
   camionesIniciales: Camion[];
@@ -563,9 +568,10 @@ export default function CamionesClient({ camionesIniciales, empresa, email }: Pr
           ultimoCambioPatente: editCamion.ultimo_cambio_patente ?? null,
         });
         const horasRestantes = Math.ceil(lock.horasRestantesGracia);
-        const mailtoSoporte = `mailto:soporte@flet-ia.vercel.app?subject=Solicitud%20de%20desbloqueo%20-%20${encodeURIComponent(editCamion.patente)}&body=${encodeURIComponent(
-          `Hola, necesito corregir datos del camión ${editCamion.patente} (${editCamion.marca} ${editCamion.modelo}).\n\nMotivo:\n\nAdjunto cédula verde para verificación.`
-        )}`;
+        const mensajeSoporte = `Hola, necesito corregir datos del camión ${editCamion.patente} (${editCamion.marca} ${editCamion.modelo}). Motivo: `;
+        const linkSoporte = SOPORTE_WHATSAPP
+          ? linkWhatsapp(SOPORTE_WHATSAPP, mensajeSoporte)
+          : `mailto:?subject=${encodeURIComponent('Desbloqueo camión ' + editCamion.patente)}&body=${encodeURIComponent(mensajeSoporte)}`;
         return (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) { setEditCamion(null); resetForm(); } }}>
           <div className="bg-white border border-gray-200 w-full max-w-xl max-h-[90vh] overflow-y-auto">
@@ -591,7 +597,7 @@ export default function CamionesClient({ camionesIniciales, empresa, email }: Pr
                   🔒 <b>Identidad del camión bloqueada</b> (creado hace más de {VENTANA_GRACIA_HORAS} h).
                   &nbsp;Patente: solo correcciones de typo (≤ 2 caracteres).
                   &nbsp;Capacidad: solo ajustes de ±10%.
-                  &nbsp;<a href={mailtoSoporte} className="underline" style={{ color: '#d4440c' }}>Reportar error grave →</a>
+                  &nbsp;<a href={linkSoporte} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: '#d4440c' }}>Reportar error grave →</a>
                   {lock.cooldownPatenteActivo && (
                     <div style={{ marginTop: 4 }}>
                       ⏳ Faltan {lock.diasParaProximaCorreccion} día{lock.diasParaProximaCorreccion === 1 ? '' : 's'} para poder volver a corregir la patente.
