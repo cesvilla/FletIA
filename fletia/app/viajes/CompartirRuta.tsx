@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { linkWhatsapp } from '@/lib/whatsapp';
+
+const MapaRuta = dynamic(() => import('@/app/viajes/MapaRuta'), { ssr: false });
 
 interface MapaData {
   polyline: [number, number][];
@@ -43,11 +46,41 @@ export default function CompartirRuta({ mapaData, climaRuta, traficoRuta }: Prop
   const [rutas, setRutas] = useState<RutaItem[]>([]);
   const [copiado, setCopiado] = useState(false);
 
+  // Seguimiento en vivo: token que estamos mirando + última data del chofer.
+  const [vivoToken, setVivoToken] = useState<string | null>(null);
+  const [vivo, setVivo] = useState<any>(null);
+  const [vivoCargando, setVivoCargando] = useState(false);
+  const [, setTickVivo] = useState(0);
+
   // Prefill del WhatsApp del dueño desde localStorage
   useEffect(() => {
     const w = localStorage.getItem('fletia_owner_whatsapp');
     if (w) setMiWhatsapp(w);
   }, []);
+
+  // Polling de la ubicación del chofer cada 15s mientras el modal en vivo está abierto.
+  useEffect(() => {
+    if (!vivoToken) { setVivo(null); return; }
+    let cancel = false;
+    const cargar = async () => {
+      try {
+        const res = await fetch(`/api/ruta-ubicacion?token=${encodeURIComponent(vivoToken)}`);
+        const d = await res.json();
+        if (!cancel) setVivo(d);
+      } catch { /* reintenta en el próximo tick */ }
+    };
+    setVivoCargando(true);
+    cargar().finally(() => { if (!cancel) setVivoCargando(false); });
+    const iv = setInterval(cargar, 15000);
+    return () => { cancel = true; clearInterval(iv); };
+  }, [vivoToken]);
+
+  // Tick de 1s para refrescar el "hace Xs" mientras el modal en vivo está abierto.
+  useEffect(() => {
+    if (!vivoToken) return;
+    const iv = setInterval(() => setTickVivo(t => t + 1), 1000);
+    return () => clearInterval(iv);
+  }, [vivoToken]);
 
   async function cargarRutas() {
     try {
@@ -175,6 +208,8 @@ export default function CompartirRuta({ mapaData, climaRuta, traficoRuta }: Prop
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <button onClick={() => setVivoToken(r.token)}
+                  style={{ fontSize: 11, padding: '5px 10px', border: '1px solid rgba(26,107,58,0.4)', borderRadius: 5, backgroundColor: '#fff', color: '#1a6b3a', cursor: 'pointer', fontWeight: 700 }}>📍 En vivo</button>
                 <a href={`${SITE}/ruta/${r.token}`} target="_blank" rel="noopener noreferrer"
                   style={{ fontSize: 11, padding: '5px 10px', border: '1px solid rgba(26,23,20,0.2)', borderRadius: 5, color: '#1a1714', textDecoration: 'none' }}>Ver</a>
                 <button onClick={() => cerrar(r.token)}
@@ -246,8 +281,56 @@ export default function CompartirRuta({ mapaData, climaRuta, traficoRuta }: Prop
           </div>
         </div>
       )}
+
+      {/* Modal de ubicación en vivo del chofer */}
+      {vivoToken && (
+        <div onClick={() => setVivoToken(null)} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ backgroundColor: '#fff', borderRadius: 10, padding: 16, maxWidth: 560, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1a1714' }}>📍 Ubicación en vivo del chofer</h3>
+              <button onClick={() => setVivoToken(null)} style={{ border: 'none', background: 'none', fontSize: 24, lineHeight: 1, cursor: 'pointer', color: '#8a8278' }}>×</button>
+            </div>
+
+            <div style={{ marginBottom: 10, fontSize: 13 }}>
+              {vivo?.ubicacion_at ? (
+                <span style={{ color: estadoVivo(vivo).color, fontWeight: 600 }}>{estadoVivo(vivo).texto}</span>
+              ) : (
+                <span style={{ color: '#8a8278' }}>
+                  {vivoCargando ? 'Cargando…' : 'El chofer todavía no activó el seguimiento. Pedile que abra el link y toque “📡 Compartir mi ubicación EN VIVO”.'}
+                </span>
+              )}
+            </div>
+
+            {vivo?.snapshot?.polyline?.length > 0 && vivo?.snapshot?.origen && vivo?.snapshot?.destino ? (
+              <div style={{ border: '1px solid rgba(26,23,20,0.1)', borderRadius: 8, overflow: 'hidden' }}>
+                <MapaRuta
+                  polyline={vivo.snapshot.polyline}
+                  origen={vivo.snapshot.origen}
+                  destino={vivo.snapshot.destino}
+                  km={vivo.snapshot.km}
+                  posicionChofer={vivo.lat != null && vivo.lon != null ? { lat: vivo.lat, lon: vivo.lon } : null}
+                />
+              </div>
+            ) : (
+              <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f0ede8', borderRadius: 8, fontSize: 13, color: '#8a8278', textAlign: 'center', padding: 16 }}>
+                Esperando la primera señal del chofer…
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: '#8a8278', marginTop: 8 }}>Se actualiza solo cada 15 segundos. El chofer tiene que mantener su pantalla abierta.</div>
+          </div>
+        </div>
+      )}
     </>
   );
+}
+
+// Texto y color del estado de la ubicación en vivo según cuán reciente sea la señal.
+function estadoVivo(v: any): { texto: string; color: string } {
+  if (!v?.ubicacion_at) return { texto: 'Sin señal todavía', color: '#8a8278' };
+  const seg = Math.max(0, Math.round((Date.now() - new Date(v.ubicacion_at).getTime()) / 1000));
+  const hace = seg < 60 ? `hace ${seg}s` : `hace ${Math.round(seg / 60)} min`;
+  if (v.tracking_activo && seg < 90) return { texto: `🟢 En vivo · última señal ${hace}`, color: '#1a6b3a' };
+  return { texto: `🟠 Última señal ${hace} · el seguimiento puede estar pausado`, color: '#c8860a' };
 }
 
 const inputStyle: React.CSSProperties = {

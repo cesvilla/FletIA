@@ -29,6 +29,18 @@ const iconDestino = new L.DivIcon({
   iconAnchor: [10, 10],
 });
 
+// Marcador del chofer en vivo: camión con halo verde pulsante.
+const iconChofer = new L.DivIcon({
+  html: `<div style="position:relative;width:34px;height:34px">
+    <div style="position:absolute;inset:0;border-radius:50%;background:rgba(26,107,58,0.35);animation:fletia-pulse 1.6s ease-out infinite"></div>
+    <div style="position:absolute;top:5px;left:5px;width:24px;height:24px;background:#1a6b3a;border:2px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,0.4)">🚚</div>
+  </div>
+  <style>@keyframes fletia-pulse{0%{transform:scale(0.6);opacity:0.9}100%{transform:scale(1.8);opacity:0}}</style>`,
+  className: '',
+  iconSize: [34, 34],
+  iconAnchor: [17, 17],
+});
+
 function AjustarVista({ polyline }: { polyline: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
@@ -53,9 +65,10 @@ interface Props {
   km: number;
   rutasAlternativas?: RutaAlternativa[];
   onSeleccionarAlternativa?: (index: number) => void;
+  posicionChofer?: { lat: number; lon: number } | null;
 }
 
-export default function MapaRuta({ polyline, origen, destino, km, rutasAlternativas, onSeleccionarAlternativa }: Props) {
+export default function MapaRuta({ polyline, origen, destino, km, rutasAlternativas, onSeleccionarAlternativa, posicionChofer }: Props) {
   const centro: [number, number] = [
     (origen.lat + destino.lat) / 2,
     (origen.lon + destino.lon) / 2,
@@ -114,6 +127,13 @@ export default function MapaRuta({ polyline, origen, destino, km, rutasAlternati
         <Marker position={[destino.lat, destino.lon]} icon={iconDestino}>
           <Popup><strong>Destino</strong><br />{destino.nombre}</Popup>
         </Marker>
+
+        {/* Marcador del chofer en vivo */}
+        {posicionChofer && (
+          <Marker position={[posicionChofer.lat, posicionChofer.lon]} icon={iconChofer}>
+            <Popup><strong>Chofer</strong><br />Ubicación en vivo</Popup>
+          </Marker>
+        )}
       </MapContainer>
     </div>
   );

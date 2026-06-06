@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { linkWhatsapp } from '@/lib/whatsapp';
 
@@ -40,12 +40,46 @@ export default function RutaPublicaClient({ token }: { token: string }) {
   const [ubicando, setUbicando] = useState(false);
   const [ubicError, setUbicError] = useState<string | null>(null);
 
+  // ── Seguimiento en vivo (tracking continuo dentro de FletIA, sin WhatsApp) ──
+  const [trackingOn, setTrackingOn] = useState(false);
+  const [trackingMsg, setTrackingMsg] = useState<string | null>(null);
+  const [ultimaSenal, setUltimaSenal] = useState<number | null>(null);
+  const [, setTick] = useState(0); // re-render cada 1s para el "hace Xs"
+  const watchIdRef = useRef<number | null>(null);
+  const wakeLockRef = useRef<any>(null);
+  const lastSentRef = useRef<number>(0);
+
   useEffect(() => {
     fetch(`/api/ruta-publica?token=${encodeURIComponent(token)}`)
       .then(r => r.json())
       .then(setData)
       .catch(() => setError(true));
   }, [token]);
+
+  // Tick de 1s mientras el seguimiento está activo (para el contador "hace Xs").
+  useEffect(() => {
+    if (!trackingOn) return;
+    const iv = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(iv);
+  }, [trackingOn]);
+
+  // Re-pedir el Wake Lock si el celular lo suelta al volver a la pestaña.
+  useEffect(() => {
+    if (!trackingOn) return;
+    const reacquire = async () => {
+      if (document.visibilityState === 'visible' && watchIdRef.current !== null && !wakeLockRef.current && 'wakeLock' in navigator) {
+        try { wakeLockRef.current = await (navigator as any).wakeLock.request('screen'); } catch { /* noop */ }
+      }
+    };
+    document.addEventListener('visibilitychange', reacquire);
+    return () => document.removeEventListener('visibilitychange', reacquire);
+  }, [trackingOn]);
+
+  // Limpieza al desmontar: cortar el watch y soltar el wake lock.
+  useEffect(() => () => {
+    if (watchIdRef.current !== null && 'geolocation' in navigator) navigator.geolocation.clearWatch(watchIdRef.current);
+    try { wakeLockRef.current?.release?.(); } catch { /* noop */ }
+  }, []);
 
   if (error) return <Pantalla emoji="⚠️" titulo="No se pudo cargar la ruta" texto="Probá de nuevo en un momento." />;
   if (!data) return <Pantalla emoji="🛣️" titulo="Cargando tu ruta…" texto="" />;
@@ -104,6 +138,63 @@ export default function RutaPublicaClient({ token }: { token: string }) {
     );
   }
 
+  // Manda la posición al backend (lo ve el dueño en su mapa en vivo).
+  function enviarPos(lat: number, lon: number) {
+    fetch('/api/ruta-ubicacion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, lat, lon, activo: true }),
+      keepalive: true,
+    }).then(() => setUltimaSenal(Date.now())).catch(() => { /* reintenta en el próximo tick */ });
+  }
+
+  // Arranca el seguimiento continuo: mantiene la pantalla encendida (Wake Lock) y
+  // manda el GPS cada ~15s mientras esta página esté abierta.
+  async function iniciarTracking() {
+    if (!('geolocation' in navigator)) { setTrackingMsg('Tu celular no permite compartir ubicación.'); return; }
+    setTrackingMsg(null);
+    if ('wakeLock' in navigator) {
+      try { wakeLockRef.current = await (navigator as any).wakeLock.request('screen'); } catch { /* sigue sin wake lock */ }
+    }
+    lastSentRef.current = 0;
+    const id = navigator.geolocation.watchPosition(
+      (pos) => {
+        const now = Date.now();
+        if (lastSentRef.current === 0 || now - lastSentRef.current >= 15000) {
+          lastSentRef.current = now;
+          enviarPos(pos.coords.latitude, pos.coords.longitude);
+        }
+      },
+      (err) => {
+        if (err.code === 1) {
+          setTrackingMsg('Tenés que permitir el acceso a tu ubicación. Tocá el candado 🔒 al lado de la dirección y activá "Ubicación".');
+        } else {
+          setTrackingMsg('Perdimos tu ubicación. Activá el GPS del celular y mantené esta pantalla abierta.');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 },
+    );
+    watchIdRef.current = id;
+    setTrackingOn(true);
+  }
+
+  // Detiene el seguimiento y avisa al backend (conserva la última posición).
+  function detenerTracking() {
+    if (watchIdRef.current !== null && 'geolocation' in navigator) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    try { wakeLockRef.current?.release?.(); } catch { /* noop */ }
+    wakeLockRef.current = null;
+    fetch('/api/ruta-ubicacion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, activo: false }),
+      keepalive: true,
+    }).catch(() => { /* noop */ });
+    setTrackingOn(false);
+  }
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: BG, paddingBottom: 40 }}>
       {/* Header */}
@@ -140,27 +231,63 @@ export default function RutaPublicaClient({ token }: { token: string }) {
         </div>
 
         {/* Botones de acción */}
-        <div style={{ display: 'grid', gap: 10, marginBottom: 20 }}>
-          <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-            style={btn('#1a6b3a')}>
+        <div style={{ display: 'grid', gap: 10, marginBottom: 12 }}>
+          <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={btn('#1a6b3a')}>
             🧭 Navegar con Google Maps
           </a>
-          {data.owner_whatsapp && (
-            <button onClick={enviarUbicacion} disabled={ubicando}
-              style={{ ...btn('#25D366'), border: 'none', width: '100%', cursor: ubicando ? 'default' : 'pointer', opacity: ubicando ? 0.7 : 1 }}>
-              {ubicando ? '📍 Obteniendo tu ubicación…' : '📍 Enviar mi ubicación a la empresa'}
+
+          {/* Seguimiento en vivo dentro de FletIA (no depende de WhatsApp) */}
+          {!trackingOn ? (
+            <button onClick={iniciarTracking}
+              style={{ ...btn('#d4440c'), border: 'none', width: '100%', cursor: 'pointer' }}>
+              📡 Compartir mi ubicación EN VIVO
             </button>
+          ) : (
+            <div style={{ border: '2px solid #1a6b3a', borderRadius: 8, padding: 14, backgroundColor: '#f1f8f3' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#1a6b3a', display: 'inline-block', animation: 'fletia-live 1.4s infinite' }} />
+                <strong style={{ color: '#1a6b3a', fontSize: 15 }}>Compartiendo tu ubicación en vivo</strong>
+              </div>
+              <div style={{ fontSize: 12, color: '#4a4540', marginBottom: 10 }}>
+                {ultimaSenal
+                  ? `Última señal enviada hace ${Math.max(0, Math.round((Date.now() - ultimaSenal) / 1000))}s. `
+                  : 'Obteniendo tu primera ubicación… '}
+                Dejá esta pantalla abierta y el celular en el soporte.
+              </div>
+              <button onClick={detenerTracking}
+                style={{ width: '100%', padding: 12, borderRadius: 8, border: '1px solid rgba(212,68,12,0.4)', backgroundColor: '#fff', color: '#d4440c', fontWeight: 700, cursor: 'pointer' }}>
+                ⏹ Detener seguimiento
+              </button>
+            </div>
           )}
+          <style>{`@keyframes fletia-live{0%{box-shadow:0 0 0 0 rgba(26,107,58,0.5)}70%{box-shadow:0 0 0 9px rgba(26,107,58,0)}100%{box-shadow:0 0 0 0 rgba(26,107,58,0)}}`}</style>
         </div>
-        {ubicError && (
+
+        {trackingMsg && (
           <div style={{ fontSize: 13, color: '#d4440c', backgroundColor: '#fff5f5', border: '1px solid rgba(212,68,12,0.2)', padding: '10px 14px', borderRadius: 6, marginBottom: 12 }}>
-            {ubicError}
+            {trackingMsg}
           </div>
         )}
+
+        <div style={{ fontSize: 12, color: '#8a8278', backgroundColor: '#fff', border: '1px solid rgba(26,23,20,0.08)', padding: '10px 14px', borderRadius: 6, marginBottom: 16, lineHeight: 1.5 }}>
+          📡 <strong>En vivo:</strong> la empresa ve tu recorrido en tiempo real mientras esta pantalla esté abierta. Para que dure todo el viaje, poné el celular en el soporte, enchufá el cargador y dejá la pantalla encendida.
+        </div>
+
+        {/* Alternativa: pin puntual o ubicación en vivo nativa de WhatsApp */}
         {data.owner_whatsapp && (
-          <div style={{ fontSize: 12, color: '#8a8278', backgroundColor: '#fff', border: '1px solid rgba(26,23,20,0.08)', padding: '10px 14px', borderRadius: 6, marginBottom: 20, lineHeight: 1.5 }}>
-            El botón verde manda tu <strong>ubicación actual</strong> al toque.<br />
-            💡 Para que te sigan <strong>en vivo</strong> todo el viaje: en ese mismo chat de WhatsApp tocá <strong>📎 → Ubicación → Compartir en tiempo real</strong> y elegí la duración. Funciona aunque bloquees el celular.
+          <div style={{ marginBottom: 20 }}>
+            <button onClick={enviarUbicacion} disabled={ubicando}
+              style={{ width: '100%', padding: 12, borderRadius: 8, border: '1px solid rgba(26,23,20,0.2)', backgroundColor: '#fff', color: '#1a1714', fontWeight: 600, cursor: ubicando ? 'default' : 'pointer', opacity: ubicando ? 0.7 : 1 }}>
+              {ubicando ? '📍 Obteniendo tu ubicación…' : '📲 O mandar un pin por WhatsApp'}
+            </button>
+            {ubicError && (
+              <div style={{ fontSize: 13, color: '#d4440c', backgroundColor: '#fff5f5', border: '1px solid rgba(212,68,12,0.2)', padding: '10px 14px', borderRadius: 6, marginTop: 8 }}>
+                {ubicError}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: '#8a8278', marginTop: 6, lineHeight: 1.5 }}>
+              💡 También podés mandar la <strong>ubicación en vivo de WhatsApp</strong> (hasta 8 h, funciona con el celu bloqueado): en ese chat tocá <strong>📎 → Ubicación → Compartir en tiempo real</strong>.
+            </div>
           </div>
         )}
 
