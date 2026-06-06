@@ -15,6 +15,7 @@ export interface Camion {
   activo: boolean;
   created_at: string;
   updated_at: string;
+  ultimo_cambio_patente?: string | null;
 }
 
 export interface NuevoCamion {

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { validarPatenteAR, normalizarPatente } from '@/lib/camion-lock';
 
 export async function GET() {
   try {
@@ -33,6 +34,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Faltan campos obligatorios' }, { status: 400 });
     }
 
+    if (!validarPatenteAR(body.patente)) {
+      return NextResponse.json(
+        { error: 'Formato de patente inválido. Usá ABC123 (viejo) o AB123CD (Mercosur).' },
+        { status: 400 },
+      );
+    }
+    if (body.patente_semi && !validarPatenteAR(body.patente_semi)) {
+      return NextResponse.json(
+        { error: 'Patente del semi inválida. Usá ABC123 o AB123CD.' },
+        { status: 400 },
+      );
+    }
+
     // Límite de camiones autorizado por el admin (guardado en user_metadata).
     // Por defecto 1; el admin lo amplía por usuario desde el panel /admin.
     const limite = Number(user.user_metadata?.limite_camiones ?? 1);
@@ -53,8 +67,8 @@ export async function POST(request: Request) {
       .from('camiones')
       .insert({
         user_id: user.id,
-        patente: body.patente.toUpperCase().trim(),
-        patente_semi: body.patente_semi ? body.patente_semi.toUpperCase().trim() : null,
+        patente: normalizarPatente(body.patente),
+        patente_semi: body.patente_semi ? normalizarPatente(body.patente_semi) : null,
         marca: body.marca,
         modelo: body.modelo,
         anio: body.anio,

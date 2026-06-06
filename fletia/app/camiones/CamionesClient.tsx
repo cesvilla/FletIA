@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Camion, NuevoCamion } from '@/lib/types';
 import Sidebar from '@/app/components/Sidebar';
+import { estadoBloqueo, VENTANA_GRACIA_HORAS } from '@/lib/camion-lock';
 
 interface Props {
   camionesIniciales: Camion[];
@@ -556,7 +557,16 @@ export default function CamionesClient({ camionesIniciales, empresa, email }: Pr
       )}
 
       {/* Modal editar camión */}
-      {editCamion && (
+      {editCamion && (() => {
+        const lock = estadoBloqueo({
+          createdAt: editCamion.created_at,
+          ultimoCambioPatente: editCamion.ultimo_cambio_patente ?? null,
+        });
+        const horasRestantes = Math.ceil(lock.horasRestantesGracia);
+        const mailtoSoporte = `mailto:soporte@flet-ia.vercel.app?subject=Solicitud%20de%20desbloqueo%20-%20${encodeURIComponent(editCamion.patente)}&body=${encodeURIComponent(
+          `Hola, necesito corregir datos del camión ${editCamion.patente} (${editCamion.marca} ${editCamion.modelo}).\n\nMotivo:\n\nAdjunto cédula verde para verificación.`
+        )}`;
+        return (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) { setEditCamion(null); resetForm(); } }}>
           <div className="bg-white border border-gray-200 w-full max-w-xl max-h-[90vh] overflow-y-auto">
 
@@ -568,16 +578,42 @@ export default function CamionesClient({ camionesIniciales, empresa, email }: Pr
               <button onClick={() => { setEditCamion(null); resetForm(); }} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
             </div>
 
+            {/* Banner de estado de bloqueo */}
+            {lock.dentroGracia ? (
+              <div className="px-6 py-3" style={{ backgroundColor: 'rgba(26,107,58,0.10)', borderBottom: '1px solid rgba(26,107,58,0.3)' }}>
+                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: '#0f4023', lineHeight: 1.5 }}>
+                  ✓ <b>Ventana de gracia activa:</b> tenés {horasRestantes} h restantes para corregir patente, marca, modelo o capacidad libremente.
+                </div>
+              </div>
+            ) : (
+              <div className="px-6 py-3" style={{ backgroundColor: 'rgba(212,68,12,0.08)', borderBottom: '1px solid rgba(212,68,12,0.25)' }}>
+                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: '#8a3a0c', lineHeight: 1.5 }}>
+                  🔒 <b>Identidad del camión bloqueada</b> (creado hace más de {VENTANA_GRACIA_HORAS} h).
+                  &nbsp;Patente: solo correcciones de typo (≤ 2 caracteres).
+                  &nbsp;Capacidad: solo ajustes de ±10%.
+                  &nbsp;<a href={mailtoSoporte} className="underline" style={{ color: '#d4440c' }}>Reportar error grave →</a>
+                  {lock.cooldownPatenteActivo && (
+                    <div style={{ marginTop: 4 }}>
+                      ⏳ Faltan {lock.diasParaProximaCorreccion} día{lock.diasParaProximaCorreccion === 1 ? '' : 's'} para poder volver a corregir la patente.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleActualizar} className="p-6 space-y-5">
 
               <div>
                 <div className="mb-3" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '2px', color: '#1a1714', textTransform: 'uppercase', fontWeight: 700 }}>Identificación</div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block mb-1" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>Patente tractor *</label>
+                    <label className="block mb-1 flex items-center gap-1" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>
+                      Patente tractor *
+                      {lock.patenteBloqueada && <span title="Solo correcciones de typo (≤ 2 caracteres)">🔒</span>}
+                    </label>
                     <input type="text" value={form.patente} onChange={e => setForm(p => ({ ...p, patente: e.target.value }))} required maxLength={8}
                       className="w-full px-3 py-2.5 text-sm font-bold outline-none uppercase"
-                      style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
+                      style={{ backgroundColor: '#f0ede8', border: `1px solid ${lock.patenteBloqueada ? 'rgba(212,68,12,0.4)' : 'rgba(26,23,20,0.2)'}` }}
                     />
                   </div>
                   <div>
@@ -641,10 +677,13 @@ export default function CamionesClient({ camionesIniciales, empresa, email }: Pr
                 <div className="mb-3" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', letterSpacing: '2px', color: '#1a1714', textTransform: 'uppercase', fontWeight: 700 }}>Datos técnicos</div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block mb-1" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>Capacidad máx. (ton) *</label>
+                    <label className="block mb-1 flex items-center gap-1" style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#1a1714', textTransform: 'uppercase' }}>
+                      Capacidad máx. (ton) *
+                      {lock.capacidadBloqueada && <span title="Solo ajustes de ±10%">🔒</span>}
+                    </label>
                     <input type="number" value={form.capacidad_max_ton} onChange={e => setForm(p => ({ ...p, capacidad_max_ton: parseFloat(e.target.value) }))} min={1} max={60} step={0.5} required
                       className="w-full px-3 py-2.5 text-sm font-medium outline-none"
-                      style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
+                      style={{ backgroundColor: '#f0ede8', border: `1px solid ${lock.capacidadBloqueada ? 'rgba(212,68,12,0.4)' : 'rgba(26,23,20,0.2)'}` }}
                     />
                   </div>
                   <div>
@@ -694,7 +733,8 @@ export default function CamionesClient({ camionesIniciales, empresa, email }: Pr
             </form>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Modal confirmar eliminación */}
       {deleteId && (
