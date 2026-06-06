@@ -67,22 +67,40 @@ export default function RutaPublicaClient({ token }: { token: string }) {
     if (!('geolocation' in navigator)) { setUbicError('Tu celular no permite compartir ubicación.'); return; }
     setUbicando(true);
     setUbicError(null);
+
+    const enviar = (pos: GeolocationPosition) => {
+      const { latitude, longitude } = pos.coords;
+      const pin = `https://maps.google.com/?q=${latitude},${longitude}`;
+      const msg = `📍 Mi ubicación ahora — viaje ${s.origen.nombre.split(',')[0]} → ${s.destino.nombre.split(',')[0]}\n${pin}`;
+      // location.href (no window.open) para que no lo bloquee el navegador móvil.
+      window.location.href = linkWhatsapp(data.owner_whatsapp!, msg);
+      setUbicando(false);
+    };
+
+    const fallar = (err: GeolocationPositionError) => {
+      // code 1 = permiso denegado · 2 = posición no disponible · 3 = timeout
+      if (err.code === 1) {
+        setUbicError('Tenés que permitir el acceso a tu ubicación. Tocá el candado 🔒 al lado de la dirección del navegador y activá "Ubicación".');
+      } else if (err.code === 3) {
+        setUbicError('Tardó en ubicarte. Activá el GPS del celular, salí a un lugar más abierto y probá de nuevo.');
+      } else {
+        setUbicError('No pudimos obtener tu ubicación. Activá el GPS del celular y probá de nuevo.');
+      }
+      setUbicando(false);
+    };
+
+    // Estrategia en 2 pasos para que funcione también en interiores y celulares
+    // sin señal de GPS fina (y en notebooks sin GPS): primero pedimos una ubicación
+    // rápida por red, aceptando una reciente (hasta 2 min). Si esa falla, recién ahí
+    // forzamos el GPS de alta precisión con más tiempo de espera.
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        const pin = `https://maps.google.com/?q=${latitude},${longitude}`;
-        const msg = `📍 Mi ubicación ahora — viaje ${s.origen.nombre.split(',')[0]} → ${s.destino.nombre.split(',')[0]}\n${pin}`;
-        // location.href (no window.open) para que no lo bloquee el navegador móvil.
-        window.location.href = linkWhatsapp(data.owner_whatsapp!, msg);
-        setUbicando(false);
-      },
-      (err) => {
-        setUbicError(err.code === 1
-          ? 'Tenés que permitir el acceso a tu ubicación para compartirla.'
-          : 'No pudimos obtener tu ubicación. Probá de nuevo al aire libre.');
-        setUbicando(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+      enviar,
+      () => navigator.geolocation.getCurrentPosition(
+        enviar,
+        fallar,
+        { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 },
+      ),
+      { enableHighAccuracy: false, timeout: 12000, maximumAge: 120000 },
     );
   }
 

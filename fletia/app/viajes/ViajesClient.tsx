@@ -184,14 +184,24 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
         const msg = typeof data?.error === 'string' ? data.error : 'No se pudo calcular la distancia. Probá de nuevo.';
         throw new Error(msg);
       }
-      setForm(p => ({ ...p, kilometros: String(data.km), peajes_total: data.peajes?.total ? String(data.peajes.total) : '' }));
-      setMapaData({ polyline: data.polyline, origen: data.origen, destino: data.destino, km: data.km, duracionMin: data.duracionMin, peajes: data.peajes });
-      setRutasAlternativas(data.rutasAlternativas || []);
+      // La ruta seleccionada por defecto es SIEMPRE la de menor distancia.
+      // Combinamos la principal que devuelve la API con sus alternativas y
+      // ordenamos por km: la más corta queda elegida y el resto como opciones.
+      const todasLasRutas = [
+        { km: data.km, polyline: data.polyline, duracionMin: data.duracionMin, peajes: data.peajes },
+        ...(data.rutasAlternativas || []),
+      ].sort((a, b) => a.km - b.km);
+      const principal = todasLasRutas[0];
+      const alternativas = todasLasRutas.slice(1);
+
+      setForm(p => ({ ...p, kilometros: String(principal.km), peajes_total: principal.peajes?.total ? String(principal.peajes.total) : '' }));
+      setMapaData({ polyline: principal.polyline, origen: data.origen, destino: data.destino, km: principal.km, duracionMin: principal.duracionMin, peajes: principal.peajes });
+      setRutasAlternativas(alternativas);
       // Scroll a la columna derecha para mostrar clima y tráfico
       setTimeout(() => {
         rightColumnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 200);
-      // Cargar clima y tráfico apenas se traza la ruta
+      // Cargar clima y tráfico apenas se traza la ruta (sobre la ruta elegida)
       setClimaRuta(null);
       setTraficoRuta(null);
       setLoadingClima(true);
@@ -200,8 +210,8 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          polyline: data.polyline,
-          km: data.km,
+          polyline: principal.polyline,
+          km: principal.km,
           origenCoord: data.origen,
           destinoCoord: data.destino,
         }),
@@ -214,7 +224,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
       fetch('/api/trafico-ruta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ polyline: data.polyline, km: data.km }),
+        body: JSON.stringify({ polyline: principal.polyline, km: principal.km }),
         signal: AbortSignal.timeout(30000),
       })
         .then(r => r.json())
@@ -994,7 +1004,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         {/* Selector de rutas alternativas */}
                         {rutasAlternativas.length > 0 && (
                           <div style={{ padding: '8px 12px', backgroundColor: '#f7f5f2', borderTop: '1px solid rgba(26,23,20,0.1)', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                            <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '1px', marginRight: '4px' }}>Ruta (km · tiempo · peajes):</span>
+                            <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '1px', marginRight: '4px' }}>Tocá para elegir la ruta (km · tiempo · peajes):</span>
                             {/* Ruta actual (seleccionada) */}
                             <div style={{
                               padding: '5px 10px', fontSize: '11px', fontWeight: 700, fontFamily: 'DM Mono, monospace',
@@ -1025,7 +1035,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
 
                         <div className="px-3 py-2.5" style={{ backgroundColor: '#fff8e7', borderTop: '2px solid #c8860a' }}>
                           <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', color: '#7a5000', fontWeight: 600 }}>
-                            ⚠ Distancia estimada por ruta vial{rutasAlternativas.length > 0 ? ' — elegí la ruta que vas a tomar' : '. Puede variar según el recorrido real del chofer'}.
+                            ⚠ Mostramos la ruta más corta. La ruta final la decide el chofer{rutasAlternativas.length > 0 ? ' — si va a tomar otra, tocala para ajustar los km y peajes' : ', así que los km pueden variar según su recorrido real'}.
                           </span>
                         </div>
                       </div>
@@ -1055,9 +1065,6 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         </div>
                       </div>
                     )}
-
-                    {/* Compartir ruta con el chofer (link de solo lectura) */}
-                    <CompartirRuta mapaData={mapaData} climaRuta={climaRuta} traficoRuta={traficoRuta} />
 
                     {/* Km y Peso */}
                     <div className="grid grid-cols-2 gap-3">
@@ -1258,6 +1265,9 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                         ⚠ {error}
                       </div>
                     )}
+
+                    {/* Compartir ruta con el chofer (link de solo lectura) — al final, antes de calcular */}
+                    <CompartirRuta mapaData={mapaData} climaRuta={climaRuta} traficoRuta={traficoRuta} />
 
                     <button
                       type="submit"
