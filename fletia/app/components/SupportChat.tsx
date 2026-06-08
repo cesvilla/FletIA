@@ -232,6 +232,11 @@ export default function SupportChat() {
     ? '0 4px 20px rgba(212,68,12,0.5)'
     : '0 4px 20px rgba(37,168,85,0.5)';
 
+  // El chofer NO necesita el soporte de FletIA (ese servicio es para el dueño/cliente).
+  // Por eso ocultamos el widget en la página pública de la ruta (/ruta/[token]).
+  // Va después de todos los hooks para no romper las reglas de hooks de React.
+  if (pathname?.startsWith('/ruta/')) return null;
+
   return (
     <>
       {/* Burbuja flotante */}
