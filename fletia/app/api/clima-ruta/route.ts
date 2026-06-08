@@ -205,7 +205,10 @@ export async function POST(request: Request) {
     // (ej. "Tucumán" de un punto intermedio y "San Miguel de Tucumán" del destino).
     // Deduplicamos por nombre normalizado Y por proximidad (<20 km = misma zona),
     // dando prioridad a origen y destino (que nunca se descartan).
-    const todosValidos = resultados.filter(Boolean) as NonNullable<typeof resultados[0]>[];
+    // Anotamos el orden de ruta (origen=0 … destino=último) ANTES de deduplicar,
+    // para poder reordenar al final sin depender de la identidad de los objetos.
+    const todosValidos = (resultados.filter(Boolean) as NonNullable<typeof resultados[0]>[])
+      .map((p, i) => ({ ...p, orden: i }));
 
     const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
     const distKm = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => {
@@ -246,8 +249,11 @@ export async function POST(request: Request) {
         elegidos[dupIdx] = { ...elegidos[dupIdx], nombre: p.nombre };
       }
     }
-    // Reordenar para mostrar de origen a destino
-    const puntos = elegidos.sort((a, b) => todosValidos.indexOf(a) - todosValidos.indexOf(b));
+    // Reordenar SIEMPRE de origen a destino por el índice de ruta anotado.
+    // (El dedupe de nombres crea objetos nuevos; el indexOf anterior devolvía -1
+    //  para ellos y mandaba el destino al principio — por eso Misiones aparecía
+    //  primero en un viaje Tucumán → Misiones.)
+    const puntos = elegidos.sort((a, b) => a.orden - b.orden);
 
     // Factor climático máximo de toda la ruta (el peor tramo manda)
     const factorMaximo = puntos.reduce((max, p) => Math.max(max, p.factorImpacto), 0);
