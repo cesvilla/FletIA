@@ -2092,6 +2092,12 @@ function TraficoWidget({ loading, traficoRuta }: {
               </div>
             )}
 
+            {/* Leyenda: explica qué es el número y qué dicen los colores de las tarjetas */}
+            <div style={{ marginBottom: 8, fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#6b6560', lineHeight: 1.45 }}>
+              Cada tarjeta es un tramo de tu ruta. El <strong>número</strong> es la velocidad real del tránsito ahí ahora; el <strong>color</strong> dice si fluye o está trabado respecto de lo normal de ese camino (por eso un tramo de ciudad lento puede estar en verde si igual circula bien).
+              <span style={{ display: 'block', marginTop: 3, color: '#8a8278', fontSize: 10, fontFamily: 'DM Mono, monospace' }}>🟢 fluido · 🟡 moderado · 🟠 lento · 🔴 congestionado</span>
+            </div>
+
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'thin', scrollbarColor: '#1a6b3a #f0ede8' }}>
               {traficoRuta.segmentos.map((s, i) => (
                 <div
@@ -2112,11 +2118,16 @@ function TraficoWidget({ loading, traficoRuta }: {
                   {/* Semáforo emoji grande */}
                   <div style={{ fontSize: 22, marginBottom: 4 }}>{s.emoji}</div>
 
-                  {/* Velocidad actual */}
+                  {/* Velocidad real ahora vs. la normal de esa ruta */}
                   <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 20, fontWeight: 800, color: s.color, lineHeight: 1 }}>
                     {s.velocidadActual}
                   </div>
-                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#8a8278', marginBottom: 4 }}>km/h</div>
+                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#8a8278', marginBottom: s.velocidadLibre > 0 ? 0 : 4 }}>km/h ahora</div>
+                  {s.velocidadLibre > 0 && (
+                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 8, color: '#aaa', marginBottom: 4 }}>
+                      normal {s.velocidadLibre}
+                    </div>
+                  )}
 
                   {/* Nivel texto */}
                   <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, fontWeight: 700, color: s.color, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5 }}>
