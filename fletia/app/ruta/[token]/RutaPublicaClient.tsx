@@ -63,16 +63,22 @@ export default function RutaPublicaClient({ token }: { token: string }) {
     return () => clearInterval(iv);
   }, [trackingOn]);
 
-  // Re-pedir el Wake Lock si el celular lo suelta al volver a la pestaña.
+  // Al volver a la pestaña (el chofer cambió de app o desbloqueó el celular):
+  // si el watch se murió en segundo plano lo reactivamos, y si se soltó el Wake
+  // Lock lo volvemos a pedir. Así el seguimiento se reanuda solo, sin que el
+  // chofer tenga que tocar nada de nuevo.
   useEffect(() => {
     if (!trackingOn) return;
     const reacquire = async () => {
-      if (document.visibilityState === 'visible' && watchIdRef.current !== null && !wakeLockRef.current && 'wakeLock' in navigator) {
+      if (document.visibilityState !== 'visible') return;
+      if (watchIdRef.current === null) { iniciarTracking(); return; }
+      if (!wakeLockRef.current && 'wakeLock' in navigator) {
         try { wakeLockRef.current = await (navigator as any).wakeLock.request('screen'); } catch { /* noop */ }
       }
     };
     document.addEventListener('visibilitychange', reacquire);
     return () => document.removeEventListener('visibilitychange', reacquire);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackingOn]);
 
   // Limpieza al desmontar: cortar el watch y soltar el wake lock.
@@ -80,6 +86,19 @@ export default function RutaPublicaClient({ token }: { token: string }) {
     if (watchIdRef.current !== null && 'geolocation' in navigator) navigator.geolocation.clearWatch(watchIdRef.current);
     try { wakeLockRef.current?.release?.(); } catch { /* noop */ }
   }, []);
+
+  // Auto-reanudar: si el chofer ya había activado el seguimiento (lo guardamos en
+  // localStorage), al reabrir el link o cuando el sistema operativo recarga la
+  // pestaña que había matado, arranca solo mientras la ruta siga activa. El
+  // permiso de ubicación ya quedó dado, así que no vuelve a preguntar.
+  useEffect(() => {
+    if (data?.estado !== 'activa') return;
+    if (trackingOn || watchIdRef.current !== null) return;
+    if (typeof window === 'undefined') return;
+    try { if (localStorage.getItem(`fletia_track_${token}`) !== '1') return; } catch { return; }
+    iniciarTracking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, token]);
 
   if (error) return <Pantalla emoji="⚠️" titulo="No se pudo cargar la ruta" texto="Probá de nuevo en un momento." />;
   if (!data) return <Pantalla emoji="🛣️" titulo="Cargando tu ruta…" texto="" />;
@@ -176,6 +195,7 @@ export default function RutaPublicaClient({ token }: { token: string }) {
     );
     watchIdRef.current = id;
     setTrackingOn(true);
+    try { localStorage.setItem(`fletia_track_${token}`, '1'); } catch { /* noop */ }
   }
 
   // Detiene el seguimiento y avisa al backend (conserva la última posición).
@@ -192,6 +212,7 @@ export default function RutaPublicaClient({ token }: { token: string }) {
       body: JSON.stringify({ token, activo: false }),
       keepalive: true,
     }).catch(() => { /* noop */ });
+    try { localStorage.removeItem(`fletia_track_${token}`); } catch { /* noop */ }
     setTrackingOn(false);
   }
 
@@ -270,7 +291,7 @@ export default function RutaPublicaClient({ token }: { token: string }) {
         )}
 
         <div style={{ fontSize: 12, color: '#8a8278', backgroundColor: '#fff', border: '1px solid rgba(26,23,20,0.08)', padding: '10px 14px', borderRadius: 6, marginBottom: 16, lineHeight: 1.5 }}>
-          📡 <strong>En vivo:</strong> la empresa ve tu recorrido en tiempo real mientras esta pantalla esté abierta. Para que dure todo el viaje, poné el celular en el soporte, enchufá el cargador y dejá la pantalla encendida.
+          📡 <strong>En vivo:</strong> la empresa ve tu recorrido en tiempo real mientras esta pantalla esté abierta. Si cambiás de app o se bloquea el celular, <strong>se reanuda solo</strong> apenas volvés a esta pantalla. Para que dure todo el viaje sin cortes, poné el celular en el soporte, enchufá el cargador y dejá la pantalla encendida.
         </div>
 
         {/* Alternativa: pin puntual o ubicación en vivo nativa de WhatsApp */}
