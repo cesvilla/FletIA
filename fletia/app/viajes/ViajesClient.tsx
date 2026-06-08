@@ -1266,9 +1266,6 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                       </div>
                     )}
 
-                    {/* Compartir ruta con el chofer (link de solo lectura) — al final, antes de calcular */}
-                    <CompartirRuta mapaData={mapaData} climaRuta={climaRuta} traficoRuta={traficoRuta} />
-
                     <button
                       type="submit"
                       disabled={loading}
@@ -1277,6 +1274,10 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                     >
                       {loading ? '⚡ CALCULANDO...' : '⚡ CALCULAR CON IA'}
                     </button>
+
+                    {/* Compartir ruta con el chofer (link de solo lectura) — DEBAJO del botón de calcular.
+                        Incluye su propio recuadro de rutas activas (Ver / En vivo / Cerrar). */}
+                    <CompartirRuta mapaData={mapaData} climaRuta={climaRuta} traficoRuta={traficoRuta} />
 
                   </div>
                 </form>

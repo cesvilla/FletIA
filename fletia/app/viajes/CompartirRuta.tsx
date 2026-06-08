@@ -177,6 +177,7 @@ export default function CompartirRuta({ mapaData, climaRuta, traficoRuta }: Prop
   return (
     <>
       <button
+        type="button"
         onClick={() => setAbierto(true)}
         disabled={!mapaData}
         style={{
@@ -208,11 +209,11 @@ export default function CompartirRuta({ mapaData, climaRuta, traficoRuta }: Prop
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                <button onClick={() => setVivoToken(r.token)}
+                <button type="button" onClick={() => setVivoToken(r.token)}
                   style={{ fontSize: 11, padding: '5px 10px', border: '1px solid rgba(26,107,58,0.4)', borderRadius: 5, backgroundColor: '#fff', color: '#1a6b3a', cursor: 'pointer', fontWeight: 700 }}>📍 En vivo</button>
                 <a href={`${SITE}/ruta/${r.token}`} target="_blank" rel="noopener noreferrer"
                   style={{ fontSize: 11, padding: '5px 10px', border: '1px solid rgba(26,23,20,0.2)', borderRadius: 5, color: '#1a1714', textDecoration: 'none' }}>Ver</a>
-                <button onClick={() => cerrar(r.token)}
+                <button type="button" onClick={() => cerrar(r.token)}
                   style={{ fontSize: 11, padding: '5px 10px', border: '1px solid rgba(212,68,12,0.3)', borderRadius: 5, backgroundColor: '#fff', color: '#d4440c', cursor: 'pointer' }}>Cerrar</button>
               </div>
             </div>
@@ -247,8 +248,8 @@ export default function CompartirRuta({ mapaData, climaRuta, traficoRuta }: Prop
                 {error && <div style={{ color: '#d4440c', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <button onClick={resetModal} style={{ flex: 1, padding: 12, borderRadius: 8, border: '1px solid rgba(26,23,20,0.2)', backgroundColor: '#fff', color: '#1a1714', cursor: 'pointer', fontWeight: 600 }}>Cancelar</button>
-                  <button onClick={crear} disabled={creando} style={{ flex: 2, padding: 12, borderRadius: 8, border: 'none', backgroundColor: '#d4440c', color: '#fff', cursor: creando ? 'default' : 'pointer', fontWeight: 700, opacity: creando ? 0.6 : 1 }}>
+                  <button type="button" onClick={resetModal} style={{ flex: 1, padding: 12, borderRadius: 8, border: '1px solid rgba(26,23,20,0.2)', backgroundColor: '#fff', color: '#1a1714', cursor: 'pointer', fontWeight: 600 }}>Cancelar</button>
+                  <button type="button" onClick={crear} disabled={creando} style={{ flex: 2, padding: 12, borderRadius: 8, border: 'none', backgroundColor: '#d4440c', color: '#fff', cursor: creando ? 'default' : 'pointer', fontWeight: 700, opacity: creando ? 0.6 : 1 }}>
                     {creando ? 'Generando…' : 'Generar link'}
                   </button>
                 </div>
@@ -270,11 +271,11 @@ export default function CompartirRuta({ mapaData, climaRuta, traficoRuta }: Prop
                       📲 Enviar al chofer por WhatsApp
                     </a>
                   )}
-                  <button onClick={() => { navigator.clipboard?.writeText(creado.url); setCopiado(true); setTimeout(() => setCopiado(false), 2000); }}
+                  <button type="button" onClick={() => { navigator.clipboard?.writeText(creado.url); setCopiado(true); setTimeout(() => setCopiado(false), 2000); }}
                     style={{ padding: 12, borderRadius: 8, border: '1px solid rgba(26,23,20,0.2)', backgroundColor: '#fff', color: '#1a1714', cursor: 'pointer', fontWeight: 600 }}>
                     {copiado ? '✓ Copiado' : '🔗 Copiar link'}
                   </button>
-                  <button onClick={resetModal} style={{ padding: 12, borderRadius: 8, border: 'none', backgroundColor: '#1a1714', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>Listo</button>
+                  <button type="button" onClick={resetModal} style={{ padding: 12, borderRadius: 8, border: 'none', backgroundColor: '#1a1714', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>Listo</button>
                 </div>
               </>
             )}
@@ -288,7 +289,7 @@ export default function CompartirRuta({ mapaData, climaRuta, traficoRuta }: Prop
           <div onClick={e => e.stopPropagation()} style={{ backgroundColor: '#fff', borderRadius: 10, padding: 16, maxWidth: 560, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1a1714' }}>📍 Ubicación en vivo del chofer</h3>
-              <button onClick={() => setVivoToken(null)} style={{ border: 'none', background: 'none', fontSize: 24, lineHeight: 1, cursor: 'pointer', color: '#8a8278' }}>×</button>
+              <button type="button" onClick={() => setVivoToken(null)} style={{ border: 'none', background: 'none', fontSize: 24, lineHeight: 1, cursor: 'pointer', color: '#8a8278' }}>×</button>
             </div>
 
             <div style={{ marginBottom: 10, fontSize: 13 }}>
