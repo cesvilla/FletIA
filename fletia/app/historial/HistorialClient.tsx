@@ -58,6 +58,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
   const [editando, setEditando] = useState<string | null>(null);
   const [form, setForm] = useState<EditForm>({ origen: '', destino: '', peso_carga: '' });
   const [guardando, setGuardando] = useState(false);
+  const [eliminando, setEliminando] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<{ id: string; texto: string; ok: boolean } | null>(null);
   const [mesSeleccionado, setMesSeleccionado] = useState('');
   const [camionSeleccionado, setCamionSeleccionado] = useState('');
@@ -167,6 +168,24 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
     setMensaje({ id: v.id, texto: '✓ Guardado', ok: true });
     setGuardando(false);
     setTimeout(() => { setEditando(null); setMensaje(null); }, 2200);
+  }
+
+  async function eliminarViaje(e: React.MouseEvent, v: Viaje) {
+    e.stopPropagation();
+    const ruta = v.origen && v.destino ? `${v.origen} → ${v.destino}` : `${v.kilometros} km`;
+    if (!window.confirm(`¿Eliminar este viaje?\n\n${ruta}\n${new Date(v.created_at).toLocaleDateString('es-AR')}\n\nEsta acción no se puede deshacer.`)) return;
+
+    setEliminando(v.id);
+    const { error } = await supabase.from('viajes').delete().eq('id', v.id);
+    if (error) {
+      setMensaje({ id: v.id, texto: `Error al eliminar: ${error.message}`, ok: false });
+      setEliminando(null);
+      return;
+    }
+    setViajes(prev => prev.filter(x => x.id !== v.id));
+    if (expandido === v.id) setExpandido(null);
+    if (editando === v.id) setEditando(null);
+    setEliminando(null);
   }
 
   // ─── ENTRENAMIENTO RÁPIDO INLINE ──────────────────────────────────
@@ -748,6 +767,12 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                               className={`p-2 rounded transition-colors text-sm ${editando === v.id ? 'bg-gray-100 text-gray-400' : 'hover:bg-orange-50 text-gray-400 hover:text-orange-500'}`}
                               title="Editar viaje"
                             >✏️</button>
+                            <button
+                              onClick={(e) => eliminarViaje(e, v)}
+                              disabled={eliminando === v.id}
+                              className="p-2 rounded transition-colors text-sm hover:bg-red-50 text-gray-400 hover:text-red-600 disabled:opacity-50"
+                              title="Eliminar viaje"
+                            >{eliminando === v.id ? '⏳' : '🗑️'}</button>
                           </div>
                         </div>
 
@@ -890,9 +915,18 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                                     <div className="text-xs text-gray-600 leading-relaxed">{v.descripcion_ia}</div>
                                   </div>
                                 )}
-                                <button onClick={(e) => abrirEdicion(e, v)} className="text-xs font-bold px-3 py-2 border border-orange-200 text-orange-500 hover:bg-orange-50 transition-colors">
-                                  ✏️ Editar este viaje
-                                </button>
+                                <div className="flex flex-wrap gap-2">
+                                  <button onClick={(e) => abrirEdicion(e, v)} className="text-xs font-bold px-3 py-2 border border-orange-200 text-orange-500 hover:bg-orange-50 transition-colors">
+                                    ✏️ Editar este viaje
+                                  </button>
+                                  <button
+                                    onClick={(e) => eliminarViaje(e, v)}
+                                    disabled={eliminando === v.id}
+                                    className="text-xs font-bold px-3 py-2 border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                                  >
+                                    {eliminando === v.id ? '⏳ Eliminando...' : '🗑️ Eliminar viaje'}
+                                  </button>
+                                </div>
                               </div>
                             )}
 
