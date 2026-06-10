@@ -59,6 +59,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
   const [form, setForm] = useState<EditForm>({ origen: '', destino: '', peso_carga: '' });
   const [guardando, setGuardando] = useState(false);
   const [eliminando, setEliminando] = useState<string | null>(null);
+  const [confirmarEliminar, setConfirmarEliminar] = useState<Viaje | null>(null);
   const [mensaje, setMensaje] = useState<{ id: string; texto: string; ok: boolean } | null>(null);
   const [mesSeleccionado, setMesSeleccionado] = useState('');
   const [camionSeleccionado, setCamionSeleccionado] = useState('');
@@ -170,22 +171,25 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
     setTimeout(() => { setEditando(null); setMensaje(null); }, 2200);
   }
 
-  async function eliminarViaje(e: React.MouseEvent, v: Viaje) {
+  function pedirEliminar(e: React.MouseEvent, v: Viaje) {
     e.stopPropagation();
-    const ruta = v.origen && v.destino ? `${v.origen} → ${v.destino}` : `${v.kilometros} km`;
-    if (!window.confirm(`¿Eliminar este viaje?\n\n${ruta}\n${new Date(v.created_at).toLocaleDateString('es-AR')}\n\nEsta acción no se puede deshacer.`)) return;
+    setConfirmarEliminar(v);
+  }
 
+  async function ejecutarEliminar(v: Viaje) {
     setEliminando(v.id);
     const { error } = await supabase.from('viajes').delete().eq('id', v.id);
     if (error) {
       setMensaje({ id: v.id, texto: `Error al eliminar: ${error.message}`, ok: false });
       setEliminando(null);
+      setConfirmarEliminar(null);
       return;
     }
     setViajes(prev => prev.filter(x => x.id !== v.id));
     if (expandido === v.id) setExpandido(null);
     if (editando === v.id) setEditando(null);
     setEliminando(null);
+    setConfirmarEliminar(null);
   }
 
   // ─── ENTRENAMIENTO RÁPIDO INLINE ──────────────────────────────────
@@ -768,7 +772,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                               title="Editar viaje"
                             >✏️</button>
                             <button
-                              onClick={(e) => eliminarViaje(e, v)}
+                              onClick={(e) => pedirEliminar(e, v)}
                               disabled={eliminando === v.id}
                               className="p-2 rounded transition-colors text-sm hover:bg-red-50 text-gray-400 hover:text-red-600 disabled:opacity-50"
                               title="Eliminar viaje"
@@ -920,7 +924,7 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
                                     ✏️ Editar este viaje
                                   </button>
                                   <button
-                                    onClick={(e) => eliminarViaje(e, v)}
+                                    onClick={(e) => pedirEliminar(e, v)}
                                     disabled={eliminando === v.id}
                                     className="text-xs font-bold px-3 py-2 border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
                                   >
@@ -970,6 +974,85 @@ export default function HistorialClient({ viajes: initViajes, email, empresa }: 
           )}
         </div>
       </main>
+
+      {/* ── Modal confirmar eliminación ───────────────────────────── */}
+      {confirmarEliminar && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(26,23,20,0.72)', backdropFilter: 'blur(3px)' }}
+          onClick={() => { if (eliminando === null) setConfirmarEliminar(null); }}
+        >
+          <div
+            className="bg-card border border-ink/10 w-full max-w-md shadow-2xl"
+            onClick={e => e.stopPropagation()}
+            style={{ animation: 'fletia-modal-in 160ms ease-out' }}
+          >
+            {/* Header con franja roja */}
+            <div style={{ backgroundColor: '#d4440c', height: '3px' }} />
+            <div className="px-5 py-4 border-b border-ink/10 flex items-center gap-3">
+              <div
+                className="flex items-center justify-center flex-shrink-0"
+                style={{ width: '38px', height: '38px', backgroundColor: 'rgba(212,68,12,0.1)', border: '1px solid rgba(212,68,12,0.3)' }}
+              >
+                <span style={{ fontSize: '20px' }}>🗑️</span>
+              </div>
+              <div>
+                <div className="font-mono text-[9px] text-ink-3 uppercase tracking-widest">// Acción irreversible</div>
+                <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, fontSize: '22px', lineHeight: 1.1, color: '#1a1714' }}>
+                  Eliminar viaje
+                </div>
+              </div>
+            </div>
+
+            {/* Detalle del viaje */}
+            <div className="px-5 py-4">
+              <div className="font-mono text-[9px] text-ink-3 uppercase tracking-widest mb-2">// Viaje a eliminar</div>
+              <div className="border border-ink/10 p-3" style={{ backgroundColor: '#fafaf8' }}>
+                <div className="text-sm font-semibold mb-1" style={{ color: '#1a1714' }}>
+                  {confirmarEliminar.origen && confirmarEliminar.destino
+                    ? `${confirmarEliminar.origen} → ${confirmarEliminar.destino}`
+                    : `${confirmarEliminar.kilometros} km`}
+                </div>
+                <div className="font-mono text-[11px]" style={{ color: '#4a4540' }}>
+                  {confirmarEliminar.camiones?.patente} · {confirmarEliminar.camiones?.marca} {confirmarEliminar.camiones?.modelo} · {confirmarEliminar.peso_carga} ton
+                </div>
+                <div className="font-mono text-[10px] mt-1" style={{ color: '#8a8278' }}>
+                  {new Date(confirmarEliminar.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  {' · costo $'}{Math.round(costoRealViaje(confirmarEliminar)).toLocaleString('es-AR')}
+                </div>
+              </div>
+              <div className="mt-3 text-xs leading-relaxed" style={{ color: '#4a4540' }}>
+                Vas a borrar este viaje del historial. No se puede deshacer y se quitará de los reportes de rentabilidad.
+              </div>
+            </div>
+
+            {/* Botones */}
+            <div className="px-5 py-3 border-t border-ink/10 flex items-center justify-end gap-2" style={{ backgroundColor: '#fafaf8' }}>
+              <button
+                onClick={() => setConfirmarEliminar(null)}
+                disabled={eliminando !== null}
+                className="px-4 py-2 text-xs font-bold border border-ink/20 text-ink hover:bg-ink/5 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => ejecutarEliminar(confirmarEliminar)}
+                disabled={eliminando !== null}
+                className="px-4 py-2 text-xs font-bold text-white transition-opacity disabled:opacity-60"
+                style={{ backgroundColor: '#d4440c' }}
+              >
+                {eliminando === confirmarEliminar.id ? '⏳ Eliminando...' : '🗑️ Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+          <style>{`
+            @keyframes fletia-modal-in {
+              from { opacity: 0; transform: translateY(8px) scale(0.98); }
+              to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+          `}</style>
+        </div>
+      )}
     </div>
   );
 }
