@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ordenarYDeduplicarPuntos, type PuntoClima } from '@/lib/clima-orden';
 
 // Códigos WMO → descripción + emoji + factor de impacto en combustible
 const WMO_CODES: Record<number, { label: string; emoji: string; factor: number }> = {
@@ -200,60 +201,11 @@ export async function POST(request: Request) {
       })
     );
 
-    // Filtrar nulos y deduplicar puntos de la misma zona.
-    // Dos cards de la misma ciudad aparecían cuando el nombre venía distinto
-    // (ej. "Tucumán" de un punto intermedio y "San Miguel de Tucumán" del destino).
-    // Deduplicamos por nombre normalizado Y por proximidad (<20 km = misma zona),
-    // dando prioridad a origen y destino (que nunca se descartan).
-    // Anotamos el orden de ruta (origen=0 … destino=último) ANTES de deduplicar,
-    // para poder reordenar al final sin depender de la identidad de los objetos.
-    const todosValidos = (resultados.filter(Boolean) as NonNullable<typeof resultados[0]>[])
-      .map((p, i) => ({ ...p, orden: i }));
-
-    const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
-    const distKm = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => {
-      const R = 6371, toRad = (d: number) => (d * Math.PI) / 180;
-      const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
-      const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
-      return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
-    };
-
-    const ultimoIdx = todosValidos.length - 1;
-    // Prioridad: origen y destino primero, luego intermedios en orden de ruta.
-    const ordenPrioridad = [
-      ...(todosValidos.length > 0 ? [0] : []),
-      ...(ultimoIdx > 0 ? [ultimoIdx] : []),
-      ...todosValidos.map((_, i) => i).filter(i => i !== 0 && i !== ultimoIdx),
-    ];
-
-    const MISMA_ZONA_KM = 30;
-    // ¿Son el mismo lugar? mismo nombre, muy cerca, o un nombre contiene al otro
-    // (ej. "Tucumán" ⊂ "San Miguel de Tucumán" = la provincia y su capital).
-    const mismoLugar = (a: { nombre: string; lat: number; lon: number }, b: { nombre: string; lat: number; lon: number }) => {
-      const na = norm(a.nombre), nb = norm(b.nombre);
-      if (na === nb) return true;
-      if (na.length >= 4 && nb.length >= 4 && (na.includes(nb) || nb.includes(na))) return true;
-      return distKm(a, b) < MISMA_ZONA_KM;
-    };
-
-    const elegidos: typeof todosValidos = [];
-    for (const i of ordenPrioridad) {
-      const p = todosValidos[i];
-      const dupIdx = elegidos.findIndex(k => mismoLugar(k, p));
-      if (dupIdx === -1) {
-        elegidos.push(p);
-      } else if (norm(p.nombre).length < norm(elegidos[dupIdx].nombre).length) {
-        // Misma zona ya presente: nos quedamos con el nombre más corto/general
-        // (la provincia "Tucumán" en vez de "San Miguel de Tucumán"),
-        // manteniendo el clima del punto que ya teníamos.
-        elegidos[dupIdx] = { ...elegidos[dupIdx], nombre: p.nombre };
-      }
-    }
-    // Reordenar SIEMPRE de origen a destino por el índice de ruta anotado.
-    // (El dedupe de nombres crea objetos nuevos; el indexOf anterior devolvía -1
-    //  para ellos y mandaba el destino al principio — por eso Misiones aparecía
-    //  primero en un viaje Tucumán → Misiones.)
-    const puntos = elegidos.sort((a, b) => a.orden - b.orden);
+    // Filtrar nulos y deduplicar puntos de la misma zona, devolviéndolos en
+    // orden de ruta (origen → destino). La lógica vive en lib/clima-orden.ts
+    // (ver ahí el detalle del dedupe y del bug de orden que arregló b93f010).
+    const validos = resultados.filter(Boolean) as PuntoClima[];
+    const puntos = ordenarYDeduplicarPuntos(validos);
 
     // Factor climático máximo de toda la ruta (el peor tramo manda)
     const factorMaximo = puntos.reduce((max, p) => Math.max(max, p.factorImpacto), 0);
