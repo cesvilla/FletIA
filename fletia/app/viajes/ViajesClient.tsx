@@ -127,6 +127,13 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   const resultadoRef = useRef<HTMLDivElement>(null);
   const rightColumnRef = useRef<HTMLDivElement>(null);
 
+  // Precio de gasoil por defecto: mediana real del precio del día (Gasoil Común),
+  // con fallback realista. Evita arrancar el cálculo con un valor irreal y subestimar el combustible.
+  const _preciosComun = precios.filter(p => p.tipo === 'Gasoil Común').map(p => p.precio).sort((a, b) => a - b);
+  const precioGasoilDefault = _preciosComun.length
+    ? String(Math.round(_preciosComun[Math.floor(_preciosComun.length / 2)]))
+    : '2200';
+
   const [form, setForm] = useState({
     camion_id: '',
     origen: '',
@@ -134,7 +141,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
     kilometros: '',
     peso_carga: '',
     detalle_carga: '',
-    precio_combustible: '1200',
+    precio_combustible: precioGasoilDefault,
     flete_cobrado: '',
     peajes_total: '',
     costo_conductor: '',       // $ por viaje (sueldo/viáticos del chofer)
@@ -245,6 +252,16 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   async function handleCalcular(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    // Guardrail de capacidad: el peso no puede superar la capacidad del camión.
+    // (Antes la validación nativa del input bloqueaba el submit SIN mostrar ningún mensaje.)
+    const pesoNum = parseFloat(form.peso_carga);
+    const capMax = camionSeleccionado?.capacidad_max_ton;
+    if (capMax && pesoNum > capMax) {
+      setError(`El peso de carga (${pesoNum} t) supera la capacidad máxima del camión (${capMax} t). Ajustá la carga.`);
+      return;
+    }
+
     setResultado(null);
     setLoading(true);
 
@@ -1093,7 +1110,6 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                           onChange={e => setForm(p => ({ ...p, peso_carga: e.target.value }))}
                           placeholder="ej: 18"
                           required min={0}
-                          max={camionSeleccionado?.capacidad_max_ton}
                           step={0.5}
                           className="w-full px-3 py-2.5 text-sm font-medium outline-none"
                           style={{ backgroundColor: '#f0ede8', border: '1px solid rgba(26,23,20,0.2)' }}
