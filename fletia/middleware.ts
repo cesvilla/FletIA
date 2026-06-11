@@ -86,6 +86,16 @@ export async function middleware(request: NextRequest) {
       if (data.estado === 'vencido' && pathname !== '/vencido') {
         return NextResponse.redirect(new URL('/vencido', request.url));
       }
+      // La cuenta se abrió en otro dispositivo → esta sesión quedó desplazada.
+      // Cerramos sesión SOLO en este navegador (borrando sus cookies de Supabase);
+      // el dispositivo nuevo sigue funcionando.
+      if (data.estado === 'otro_dispositivo') {
+        const redirect = NextResponse.redirect(new URL('/login?dispositivo=1', request.url));
+        request.cookies.getAll().forEach((c) => {
+          if (c.name.startsWith('sb-')) redirect.cookies.delete(c.name);
+        });
+        return redirect;
+      }
     } catch {
       // Si falla la verificación, dejar pasar
     }

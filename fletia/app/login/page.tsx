@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
@@ -21,7 +21,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState <string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
-  const pendiente = typeof window !== 'undefined' && window.location.search.includes('pendiente=1');
+  // Leído tras montar para que el render del server y del cliente coincidan
+  // (evita warnings de hidratación al mostrar los carteles según la URL).
+  const [pendiente, setPendiente] = useState(false);
+  const [desplazado, setDesplazado] = useState(false);
+  useEffect(() => {
+    const sp = window.location.search;
+    setPendiente(sp.includes('pendiente=1'));
+    setDesplazado(sp.includes('dispositivo=1'));
+  }, []);
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -96,6 +104,17 @@ export default function LoginPage() {
 
         if (error) throw error;
 
+        // Candado de un solo dispositivo: intentamos reclamar este dispositivo.
+        // Si la cuenta YA está activa en otro lado, el claim responde 409 y NO
+        // dejamos entrar: cerramos la sesión recién creada solo en este navegador.
+        const claimRes = await fetch('/api/accesos/claim', { method: 'POST' });
+        if (claimRes.status === 409) {
+          await supabase.auth.signOut({ scope: 'local' });
+          setError('Esta cuenta ya está abierta en otro dispositivo. Cerrá la sesión allí (o esperá unos minutos) e intentá de nuevo.');
+          setLoading(false);
+          return;
+        }
+
         const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
         if (signInData.user?.email === adminEmail) {
           router.push('/admin');
@@ -123,6 +142,11 @@ export default function LoginPage() {
           {pendiente && (
   <div className="bg-yellow-50 border border-yellow-300 text-yellow-800 text-xs font-mono px-3 py-2.5 mb-4">
     ⏳ Confirmá tu email antes de ingresar. Revisá tu bandeja de entrada.
+  </div>
+)}
+          {desplazado && (
+  <div className="bg-accent/10 border border-accent/30 text-accent text-xs font-mono px-3 py-2.5 mb-4">
+    🔒 Tu cuenta se abrió en otro dispositivo. Por seguridad, cerramos esta sesión. Volvé a ingresar para usarla acá.
   </div>
 )}
           <div className="font-mono text-[10px] tracking-[3px] text-ink-3 mt-1 uppercase">

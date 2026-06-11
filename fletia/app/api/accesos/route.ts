@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { leerDeviceToken, dispositivoActivo } from '@/lib/deviceLock';
 
 // POST — llamado al registrarse, crea el acceso pendiente
 export async function POST(request: Request) {
@@ -47,7 +48,7 @@ export async function GET(request: Request) {
     const admin = createAdminClient();
     const { data, error } = await admin
       .from('accesos')
-      .select('aprobado, fecha_expiracion, empresa')
+      .select('aprobado, fecha_expiracion, empresa, device_token, device_seen_at')
       .eq('user_id', user_id)
       .single();
 
@@ -57,6 +58,26 @@ export async function GET(request: Request) {
 
     if (data.fecha_expiracion && new Date(data.fecha_expiracion) < new Date()) {
       return NextResponse.json({ estado: 'vencido' });
+    }
+
+    // Candado de un solo dispositivo.
+    if (data.device_token) {
+      const incoming = leerDeviceToken(request.headers.get('cookie'));
+      if (incoming === data.device_token) {
+        // Es el dispositivo dueño → refrescamos su "última actividad" (heartbeat),
+        // como mucho una vez por minuto para no escribir en cada navegación.
+        const cutoff = new Date(Date.now() - 60_000).toISOString();
+        await admin
+          .from('accesos')
+          .update({ device_seen_at: new Date().toISOString() })
+          .eq('user_id', user_id)
+          .lt('device_seen_at', cutoff);
+      } else if (dispositivoActivo(data.device_seen_at)) {
+        // Otro token Y el dueño sigue activo → esta sesión sobra: la expulsamos.
+        return NextResponse.json({ estado: 'otro_dispositivo' });
+      }
+      // Otro token pero el dueño está inactivo → lo dejamos seguir; en su próximo
+      // login podrá reclamar el candado (no trabamos a un único usuario que volvió).
     }
 
     return NextResponse.json({ estado: 'activo', fecha_expiracion: data.fecha_expiracion });
