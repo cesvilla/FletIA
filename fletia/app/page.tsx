@@ -39,7 +39,13 @@ export default function LandingPage() {
 
       <div className="shell">
         <nav className="top">
-          <Link href="/" className="logo">
+          <Link href="/" className="logo" style={{ display: 'inline-flex', alignItems: 'center', gap: '9px' }}>
+            <svg width="36" height="26" viewBox="0 0 84 60" aria-hidden="true" style={{ color: '#eb4b15', flexShrink: 0 }}>
+              <path fill="currentColor" d="M8,18 H48 V44 H8 Z M50,26 H64 L72,35 V44 H50 Z"/>
+              <path fill="currentColor" fillRule="evenodd" d="M20,39 a7,7 0 1,0 0,14 a7,7 0 1,0 0,-14 Z M20,43 a3,3 0 1,1 0,6 a3,3 0 1,1 0,-6 Z"/>
+              <path fill="currentColor" fillRule="evenodd" d="M60,39 a7,7 0 1,0 0,14 a7,7 0 1,0 0,-14 Z M60,43 a3,3 0 1,1 0,6 a3,3 0 1,1 0,-6 Z"/>
+              <circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="20" cy="8" r="2.6" fill="currentColor"/><circle cx="28" cy="4" r="3.2" fill="currentColor"/>
+            </svg>
             <span><b>Flet</b><span className="ia">IA</span></span>
           </Link>
           <div className="actions">
@@ -76,6 +82,7 @@ export default function LandingPage() {
                 { icon: '🗺️', title: 'Mapa de ruta',           desc: 'Trazado visual del recorrido antes de salir' },
                 { icon: '🌤️', title: 'Clima en ruta',           desc: 'Pronóstico real por puntos del trayecto' },
                 { icon: '🚦', title: 'Tráfico en tiempo real',  desc: 'Demoras e incidentes sobre tu ruta' },
+                { icon: '📡', title: 'Seguimiento del chofer',  desc: 'Compartís la ruta y lo seguís en vivo en el mapa' },
                 { icon: '⚡', title: 'Calculadora con IA',      desc: 'Costo exacto según peso, ruta y terreno' },
                 { icon: '🤖', title: 'IA que aprende',          desc: 'Se ajusta con los litros reales de cada viaje' },
                 { icon: '💰', title: 'Rentabilidad por viaje',  desc: 'Ganancia y margen neto al instante' },
@@ -214,6 +221,33 @@ export default function LandingPage() {
           </div>
           <div className="reveal" style={{ textAlign: 'center', marginTop: 24, fontFamily: 'DM Mono, monospace', fontSize: '0.72rem', color: 'rgba(240,237,232,0.3)', letterSpacing: '0.5px' }}>
             +10 camiones? <a href="mailto:hola@flet-ia.com" style={{ color: 'rgb(235,75,21)', textDecoration: 'none' }}>Escribinos</a> y armamos un plan a medida.
+          </div>
+        </section>
+
+        <section className="section" id="faq" style={{ paddingTop: '24px', paddingBottom: '64px' }}>
+          <div className="section-head reveal" style={{ justifyContent: 'center', textAlign: 'center', flexDirection: 'column', alignItems: 'center', marginBottom: '40px' }}>
+            <div>
+              <div className="section-tag">// Preguntas frecuentes</div>
+              <h2 className="section-title" style={{ textAlign: 'center' }}>Lo que todos preguntan antes de empezar</h2>
+            </div>
+          </div>
+          <div className="reveal-stagger" style={{ maxWidth: '720px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {[
+              { q: '¿Necesito instalar un GPS o algún equipo?', a: 'No. FletIA funciona desde el celular o la computadora, sin instalar ningún hardware. Cargás el viaje y listo.' },
+              { q: 'Tengo un solo camión, ¿me sirve igual?', a: 'Sí. Probás 15 días gratis con 1 camión, sin tarjeta. Cada unidad tiene su propio perfil de consumo que la IA va aprendiendo.' },
+              { q: '¿De dónde sale el precio del gasoil?', a: 'Se actualiza solo con datos oficiales de la Secretaría de Energía, por estación de servicio. No tenés que cargar nada a mano.' },
+              { q: '¿Puedo seguir al chofer durante el viaje?', a: 'Sí. Generás un link, se lo mandás por WhatsApp y seguís su ubicación en vivo en el mapa, sin que instale ninguna app.' },
+              { q: '¿Mis datos están seguros?', a: 'Sí. Cada cuenta ve únicamente su propia información — tus camiones, viajes y costos no los ve nadie más.' },
+              { q: '¿Hay permanencia? ¿Puedo cancelar cuando quiera?', a: 'No hay permanencia. Cancelás cuando quieras y dejás de pagar. Sin letra chica.' },
+            ].map((f) => (
+              <details key={f.q} className="faq" style={{ background: 'rgba(240,237,232,0.03)', border: '1px solid rgba(240,237,232,0.1)', borderRadius: '12px', overflow: 'hidden' }}>
+                <summary style={{ cursor: 'pointer', padding: '16px 20px', fontWeight: 700, fontSize: '0.95rem', color: '#f0ede8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                  {f.q}
+                  <span className="ic" style={{ color: '#eb4b15', fontSize: '1.4rem', lineHeight: 1, flexShrink: 0 }}>+</span>
+                </summary>
+                <div style={{ padding: '0 20px 16px', fontSize: '0.9rem', lineHeight: 1.6, color: 'rgba(240,237,232,0.6)' }}>{f.a}</div>
+              </details>
+            ))}
           </div>
         </section>
 

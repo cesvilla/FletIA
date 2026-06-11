@@ -791,3 +791,10 @@ body:has(.shell) {
   background-color: #0d0b09;
   color: #f0ede8;
 }
+
+/* ── FAQ accordion ── */
+details.faq summary { list-style: none; }
+details.faq summary::-webkit-details-marker { display: none; }
+details.faq summary .ic { transition: transform 0.2s ease; }
+details.faq[open] summary .ic { transform: rotate(45deg); }
+details.faq[open] { border-color: rgba(235,75,21,0.3) !important; }

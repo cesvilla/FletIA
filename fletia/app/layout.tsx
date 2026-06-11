@@ -3,8 +3,17 @@ import './globals.css';
 import SupportChat from './components/SupportChat';
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://flet-ia.vercel.app'),
   title: 'FletIA — Inteligencia para cada viaje de tu flota',
   description: 'Calculá el costo real de cada flete antes de salir: combustible, peajes, ruta, clima y tráfico. IA que aprende el consumo de cada camión y te dice si el viaje es rentable. Para transportistas y flotas argentinas.',
+  openGraph: {
+    title: 'FletIA — Inteligencia para cada viaje',
+    description: 'Calculá el costo real de cada flete antes de salir. IA que aprende tu camión y te dice si el viaje es rentable. Probalo 15 días gratis, sin tarjeta.',
+    url: 'https://flet-ia.vercel.app',
+    siteName: 'FletIA',
+    locale: 'es_AR',
+    type: 'website',
+  },
 };
 
 export default function RootLayout({
