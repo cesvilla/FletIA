@@ -1,20 +1,22 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { DEVICE_COOKIE, leerDeviceToken, dispositivoActivo } from '@/lib/deviceLock';
+import { DEVICE_COOKIE } from '@/lib/deviceLock';
 import { randomUUID } from 'crypto';
 
 /**
  * POST /api/accesos/claim
  *
- * Se llama justo después de un login exitoso. Hace cumplir "un solo dispositivo
- * por cuenta": si la cuenta YA está activa en otro dispositivo, este login se
- * RECHAZA (status 409). Si está libre, reclama el dispositivo actual.
+ * Se llama justo después de un login exitoso. Modelo "última sesión gana":
+ * este dispositivo queda como el dueño de la cuenta y cualquier sesión anterior
+ * se desplaza (se cierra sola en su próxima navegación). Así un mismo cliente
+ * pasa libremente de la PC al teléfono, pero dos personas no pueden usar la
+ * cuenta a la vez (la que entra desconecta a la otra).
  *
  * Seguridad: el usuario se toma de la sesión autenticada (cookies), NUNCA del
  * body. Así nadie puede manipular el candado de una cuenta ajena.
  */
-export async function POST(request: Request) {
+export async function POST() {
   try {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -24,29 +26,12 @@ export async function POST(request: Request) {
     const ADMIN = process.env.NEXT_PUBLIC_ADMIN_EMAIL || process.env.ADMIN_EMAIL;
     if (user.email === ADMIN) return NextResponse.json({ ok: true, admin: true });
 
-    const admin = createAdminClient();
-    const { data: acc } = await admin
-      .from('accesos')
-      .select('device_token, device_seen_at')
-      .eq('user_id', user.id)
-      .single();
-
-    const incoming = leerDeviceToken(request.headers.get('cookie'));
-
-    // ¿Hay OTRO dispositivo distinto y todavía activo? → no dejamos entrar acá.
-    if (
-      acc?.device_token &&
-      acc.device_token !== incoming &&
-      dispositivoActivo(acc.device_seen_at)
-    ) {
-      return NextResponse.json({ blocked: true }, { status: 409 });
-    }
-
-    // Libre (o es el mismo dispositivo, o el dueño quedó inactivo): reclamamos.
+    // Reclamamos este dispositivo como la sesión vigente.
     const token = randomUUID();
+    const admin = createAdminClient();
     const { error } = await admin
       .from('accesos')
-      .update({ device_token: token, device_seen_at: new Date().toISOString() })
+      .update({ device_token: token })
       .eq('user_id', user.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

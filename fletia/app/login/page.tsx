@@ -104,16 +104,10 @@ export default function LoginPage() {
 
         if (error) throw error;
 
-        // Candado de un solo dispositivo: intentamos reclamar este dispositivo.
-        // Si la cuenta YA está activa en otro lado, el claim responde 409 y NO
-        // dejamos entrar: cerramos la sesión recién creada solo en este navegador.
-        const claimRes = await fetch('/api/accesos/claim', { method: 'POST' });
-        if (claimRes.status === 409) {
-          await supabase.auth.signOut({ scope: 'local' });
-          setError('Esta cuenta ya está abierta en otro dispositivo. Cerrá la sesión allí (o esperá unos minutos) e intentá de nuevo.');
-          setLoading(false);
-          return;
-        }
+        // Candado de un solo dispositivo ("última sesión gana"): este dispositivo
+        // queda como dueño de la cuenta; si había otra sesión abierta, se cierra
+        // sola en su próxima pantalla.
+        await fetch('/api/accesos/claim', { method: 'POST' });
 
         const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
         if (signInData.user?.email === adminEmail) {
