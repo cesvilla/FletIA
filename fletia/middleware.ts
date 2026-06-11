@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PUBLIC_PATHS = ['/', '/login', '/registro', '/pendiente', '/vencido', '/reset-password'];
+const PUBLIC_PATHS = ['/', '/login', '/registro', '/pendiente', '/vencido', '/reset-password', '/privacidad'];
 
 export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -12,6 +12,13 @@ export async function middleware(request: NextRequest) {
   if (!supabaseUrl || !supabaseKey) return NextResponse.next();
 
   const pathname = request.nextUrl.pathname;
+
+  // Páginas de marketing 100% públicas: no requieren chequear sesión.
+  // Evita una llamada a Supabase Auth (getUser) en cada visita anónima → mejor TTFB del landing.
+  if (pathname === '/' || pathname === '/privacidad') {
+    return NextResponse.next();
+  }
+
   const isPublic = PUBLIC_PATHS.some(p => pathname === p || pathname === p + '/') ||
     pathname.startsWith('/ruta/') ||  // links de ruta para choferes (solo lectura, sin login)
     pathname.startsWith('/_next') ||

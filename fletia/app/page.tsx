@@ -257,6 +257,8 @@ export default function LandingPage() {
               <span>© 2026 FletIA · Todos los derechos reservados.</span>
               <span className="flag" aria-label="Argentina"></span>
               <span>Argentina</span>
+              <span style={{ opacity: 0.4 }}>·</span>
+              <Link href="/privacidad" style={{ color: 'rgba(240,237,232,0.45)', textDecoration: 'none' }}>Política de privacidad</Link>
             </div>
           </div>
         </footer>
