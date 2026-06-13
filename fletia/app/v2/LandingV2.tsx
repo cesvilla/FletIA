@@ -49,6 +49,7 @@ function LogoMark() {
 
 export default function LandingV2() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const globeRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<SceneAPI | null>(null);
   const [enable3D, setEnable3D] = useState(false);
 
@@ -107,6 +108,18 @@ export default function LandingV2() {
         };
       }
 
+      // --- Globo de red (sección "Red inteligente") ---
+      if (use3D && globeRef.current && !disposed) {
+        const { createGlobeScene } = await import('./GlobeScene');
+        if (!disposed && globeRef.current) {
+          const g = createGlobeScene(globeRef.current);
+          const onGResize = () => g.resize();
+          window.addEventListener('resize', onGResize);
+          const prevG = cleanup;
+          cleanup = () => { prevG(); window.removeEventListener('resize', onGResize); g.dispose(); };
+        }
+      }
+
       // --- Reveals cinematográficos ---
       const ctx = gsap.context(() => {
         if (reduce) {
@@ -150,9 +163,9 @@ export default function LandingV2() {
 
   return (
     <div className="v2">
-      {enable3D
-        ? <canvas ref={canvasRef} className="v2-canvas" aria-hidden="true" />
-        : <div className="v2-fallback" aria-hidden="true" />}
+      <div className="v2-sky" aria-hidden="true" />
+      <canvas ref={canvasRef} className="v2-canvas" aria-hidden="true" />
+      {!enable3D && <div className="v2-fallback" aria-hidden="true" />}
       <div className="v2-grain" aria-hidden="true" />
 
       <div className="v2-content">
@@ -253,6 +266,24 @@ export default function LandingV2() {
           </div>
         </section>
 
+        {/* RED INTELIGENTE */}
+        <section className="v2-section" id="red">
+          <div className="v2-head center r">
+            <div className="v2-tag">// Red inteligente</div>
+            <h2 className="v2-h2">Cada ruta, conectada</h2>
+            <p className="v2-sub">FletIA aprende de cada viaje y escala con tu operación — de un camión a toda tu flota, en todo el país.</p>
+          </div>
+          <div className="v2-globe-wrap r">
+            <canvas ref={globeRef} className="v2-globe" aria-hidden="true" />
+            {!enable3D && <div className="v2-globe-fallback" aria-hidden="true" />}
+            <div className="v2-globe-cards">
+              <div className="glass gcard a"><div className="gk">// Aprendizaje</div><div className="gv">+47 viajes</div><div className="gd">afinan el consumo real de cada camión</div></div>
+              <div className="glass gcard b"><div className="gk">// Escala</div><div className="gv">1 → 10+ camiones</div><div className="gd">la misma plataforma, sin fricción</div></div>
+              <div className="glass gcard c"><div className="gk">// Cobertura</div><div className="gv">Todo el país</div><div className="gd">rutas del NOA y más allá</div></div>
+            </div>
+          </div>
+        </section>
+
         {/* PLANES */}
         <section className="v2-section" id="planes">
           <div className="v2-head center r">
@@ -348,6 +379,11 @@ export default function LandingV2() {
           background-image:radial-gradient(1200px 600px at 70% -5%, rgba(235,75,21,0.16), transparent 60%), radial-gradient(900px 500px at 10% 20%, rgba(58,110,165,0.10), transparent 55%);
           overflow-x:hidden;
         }
+        .v2-sky { position:fixed; inset:0; z-index:0; pointer-events:none;
+          background:
+            radial-gradient(100% 72% at 72% 70%, rgba(235,75,21,0.22), transparent 62%),
+            radial-gradient(80% 60% at 18% 18%, rgba(58,110,165,0.08), transparent 60%),
+            linear-gradient(180deg, #0a0807 0%, #0d0a08 52%, #1c0f0a 100%); }
         .v2-canvas { position:fixed; inset:0; width:100vw; height:100vh; z-index:0; pointer-events:none; }
         .v2-fallback { position:fixed; inset:0; z-index:0; pointer-events:none;
           background:radial-gradient(60% 50% at 70% 40%, rgba(235,75,21,0.22), transparent 70%), repeating-linear-gradient(0deg, transparent, transparent 38px, rgba(235,75,21,0.05) 39px), repeating-linear-gradient(90deg, transparent, transparent 38px, rgba(235,75,21,0.05) 39px);
@@ -434,6 +470,17 @@ export default function LandingV2() {
         .v2-console .calc .row.total { border-top:1px solid rgba(240,237,232,0.12); margin-top:6px; padding-top:11px; font-weight:700; color:var(--cream); font-size:0.95rem; }
         .v2-console .rentab { display:inline-block; margin-top:12px; font-size:0.78rem; color:#28c840; }
 
+        .v2-globe-wrap { position:relative; max-width:920px; margin:0 auto; height:min(64vh,580px); }
+        .v2-globe, .v2-globe-fallback { position:absolute; inset:0; width:100%; height:100%; display:block; }
+        .v2-globe-fallback { margin:auto; width:min(78%,440px); height:min(78%,440px); border-radius:50%;
+          background:radial-gradient(circle at 50% 45%, rgba(235,75,21,0.2), rgba(235,75,21,0.05) 55%, transparent 72%); border:1px solid rgba(235,75,21,0.22); }
+        .v2-globe-cards { position:absolute; inset:0; pointer-events:none; }
+        .v2-globe-cards .gcard { position:absolute; padding:13px 16px; max-width:210px; pointer-events:auto; }
+        .gcard .gk { font-family:var(--mono); font-size:0.66rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--accent); }
+        .gcard .gv { font-family:var(--disp); font-weight:800; font-size:1.35rem; margin:4px 0 2px; line-height:1; }
+        .gcard .gd { font-size:0.74rem; color:rgba(240,237,232,0.55); line-height:1.4; }
+        .gcard.a { top:5%; left:0; } .gcard.b { bottom:7%; left:4%; } .gcard.c { top:24%; right:0; }
+
         .v2-plans { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; align-items:stretch; }
         .v2-plan { padding:32px 26px; display:flex; flex-direction:column; position:relative; }
         .v2-plan.featured { border-color:rgba(235,75,21,0.5); box-shadow:0 0 40px rgba(235,75,21,0.18); }
@@ -471,6 +518,12 @@ export default function LandingV2() {
           .v2-feats { grid-template-columns:1fr 1fr; }
           .v2-how { grid-template-columns:1fr; gap:32px; }
           .v2-plans { grid-template-columns:1fr; max-width:420px; margin:0 auto; }
+        }
+        @media (max-width:760px){
+          .v2-globe-wrap { height:auto; }
+          .v2-globe, .v2-globe-fallback { position:relative; inset:auto; height:44vh; margin:0 auto; }
+          .v2-globe-cards { position:static; display:grid; grid-template-columns:1fr; gap:10px; margin-top:18px; }
+          .v2-globe-cards .gcard { position:static; inset:auto; max-width:none; }
         }
         @media (max-width:560px){
           .v2-feats, .v2-mini { grid-template-columns:1fr; }
