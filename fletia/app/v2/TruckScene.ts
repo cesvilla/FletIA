@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 /**
  * Escena 3D procedural para la landing v2 de FletIA.
@@ -39,6 +41,10 @@ export function createTruckScene(canvas: HTMLCanvasElement): SceneAPI {
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(DARK, 9, 36);
 
+  // Entorno para reflejos realistas (image-based lighting) en metal/cromo/pintura.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 120);
   camera.position.set(KEYS[0].pos[0], KEYS[0].pos[1], KEYS[0].pos[2]);
 
@@ -78,6 +84,12 @@ export function createTruckScene(canvas: HTMLCanvasElement): SceneAPI {
   const rimMat = new THREE.MeshStandardMaterial({ color: 0x9a9a9e, metalness: 0.95, roughness: 0.3, transparent: true, opacity: 0 });
 
   const solidMats = [bodyMat, trailerMat, accentMat, glassMat, tireMat, chromeMat, rimMat];
+  // Intensidad de reflejo del entorno por material (realismo).
+  chromeMat.envMapIntensity = 1.5;
+  rimMat.envMapIntensity = 1.3;
+  glassMat.envMapIntensity = 1.2;
+  bodyMat.envMapIntensity = 0.9;
+  trailerMat.envMapIntensity = 0.9;
   const edgeMats: THREE.LineBasicMaterial[] = [edgeMat];
 
   // Caja con bordes alámbricos brillantes superpuestos.
@@ -174,8 +186,50 @@ export function createTruckScene(canvas: HTMLCanvasElement): SceneAPI {
     [1.13, -1.13].forEach((z) => truck.add(wheel(x, z)));
   });
 
+  // Espejos retrovisores
+  [1, -1].forEach((s) => {
+    const arm = panel(0.05, 0.05, 0.5, chromeMat); arm.position.set(3.05, 1.95, s * 1.42); truck.add(arm);
+    const mir = panel(0.06, 0.7, 0.22, bodyMat); mir.position.set(3.1, 1.72, s * 1.64); truck.add(mir);
+  });
+  // Luces de posición naranjas en el techo de la cabina (clásico semi)
+  for (let i = -2; i <= 2; i++) {
+    const ml = panel(0.12, 0.07, 0.1, accentMat); ml.position.set(2.5, 2.93, i * 0.42); truck.add(ml);
+  }
+  // Guardabarros del remolque
+  [1, -1].forEach((s) => {
+    const flap = panel(0.06, 0.5, 0.5, tireMat); flap.position.set(-5.45, 0.5, s * 1.13); truck.add(flap);
+  });
+
   truck.position.set(0, 0, 0);
   scene.add(truck);
+
+  // Realismo total opcional: si existe /models/truck.glb se usa ese modelo
+  // (fotorrealista) en lugar del camión procedural. Si no está, fallback silencioso.
+  let usingModel = false;
+  new GLTFLoader().load(
+    '/models/truck.glb',
+    (gltf) => {
+      const model = gltf.scene;
+      const b1 = new THREE.Box3().setFromObject(model);
+      const size = b1.getSize(new THREE.Vector3());
+      model.scale.setScalar(11 / Math.max(size.x, size.z, 0.001));
+      const b2 = new THREE.Box3().setFromObject(model);
+      const c = b2.getCenter(new THREE.Vector3());
+      model.position.set(-c.x, -b2.min.y, -c.z); // centrado y apoyado en el piso
+      model.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if ((m as unknown as { isMesh?: boolean }).isMesh) {
+          const mat = m.material as THREE.MeshStandardMaterial;
+          if (mat && 'envMapIntensity' in mat) mat.envMapIntensity = 1.1;
+        }
+      });
+      truck.children.forEach((ch) => { ch.visible = false; }); // oculta el procedural
+      truck.add(model);
+      usingModel = true;
+    },
+    undefined,
+    () => { /* sin modelo: queda el camión procedural */ },
+  );
 
   // ---- Grilla industrial ----
   const grid = new THREE.GridHelper(80, 80, ACCENT, 0x2a2420);
@@ -246,17 +300,20 @@ export function createTruckScene(canvas: HTMLCanvasElement): SceneAPI {
     camera.position.set(pos.x + cpx * 1.2, pos.y + cpy * 0.8, pos.z);
     camera.lookAt(look.x, look.y, look.z);
 
-    // materialización wireframe -> sólido (primer ~25% del scroll)
-    const fill = THREE.MathUtils.smoothstep(current, 0.02, 0.26);
-    bodyMat.opacity = fill;
-    trailerMat.opacity = fill * 0.96;
-    accentMat.opacity = fill;
-    glassMat.opacity = fill * 0.85;
-    tireMat.opacity = fill;
-    chromeMat.opacity = fill;
-    rimMat.opacity = fill;
-    edgeMat.opacity = 0.95 - fill * 0.45; // las líneas se atenúan al rellenarse
-    accentMat.emissiveIntensity = 0.7 + Math.sin(t * 2) * 0.25; // pulso del acento
+    // materialización wireframe -> sólido (primer ~25% del scroll). Si se cargó un
+    // modelo .glb realista, no aplica (el modelo se muestra sólido directamente).
+    if (!usingModel) {
+      const fill = THREE.MathUtils.smoothstep(current, 0.02, 0.26);
+      bodyMat.opacity = fill;
+      trailerMat.opacity = fill * 0.96;
+      accentMat.opacity = fill;
+      glassMat.opacity = fill * 0.85;
+      tireMat.opacity = fill;
+      chromeMat.opacity = fill;
+      rimMat.opacity = fill;
+      edgeMat.opacity = 0.95 - fill * 0.45; // las líneas se atenúan al rellenarse
+      accentMat.emissiveIntensity = 0.7 + Math.sin(t * 2) * 0.25; // pulso del acento
+    }
 
     // idle del camión + partículas vivas
     truck.rotation.y = Math.sin(t * 0.18) * 0.12 + current * 0.5;
@@ -283,6 +340,8 @@ export function createTruckScene(canvas: HTMLCanvasElement): SceneAPI {
     });
     [...solidMats, ...edgeMats, pMat].forEach((m) => m.dispose());
     pGeo.dispose();
+    scene.environment?.dispose();
+    pmrem.dispose();
     renderer.dispose();
   }
 

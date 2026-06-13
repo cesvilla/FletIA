@@ -17,17 +17,6 @@ export interface GlobeAPI {
   dispose(): void;
 }
 
-// Punto sobre la esfera por lat/long (grados).
-function onSphere(latDeg: number, lonDeg: number, radius = R): THREE.Vector3 {
-  const lat = (latDeg * Math.PI) / 180;
-  const lon = (lonDeg * Math.PI) / 180;
-  return new THREE.Vector3(
-    radius * Math.cos(lat) * Math.cos(lon),
-    radius * Math.sin(lat),
-    radius * Math.cos(lat) * Math.sin(lon),
-  );
-}
-
 export function createGlobeScene(canvas: HTMLCanvasElement): GlobeAPI {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -88,26 +77,33 @@ export function createGlobeScene(canvas: HTMLCanvasElement): GlobeAPI {
   globe.add(halo);
 
   // Arcos de red entre hubs (grandes círculos elevados).
-  const HUBS: [number, number][] = [
-    [-26, -65], [-34, -58], [4, -74], [-12, -77], [10, -84], [19, -99],
-    [40, -3], [48, 2], [51, 0], [40, -74], [34, -118], [45, -122], [29, -95],
-    [19, 72], [28, 77], [35, 139], [37, 127], [1, 103], [13, 100], [-6, 106],
-    [-33, 151], [-37, 144], [55, 37], [25, 55], [35, 51], [-23, 43], [-1, 36],
-    [9, 38], [30, 31], [64, -21], [60, 24], [52, 13], [41, 28], [-15, -47], [-23, -46],
-  ];
-  const arcMat = new THREE.LineBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending });
+  // Hubs distribuidos por TODO el globo (fibonacci) → red global y dispareja.
+  const HUBN = 52;
+  const hubs: THREE.Vector3[] = [];
+  const gAng = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < HUBN; i++) {
+    const y = 1 - (i / (HUBN - 1)) * 2;
+    const rr = Math.sqrt(1 - y * y);
+    const th = gAng * i;
+    hubs.push(new THREE.Vector3(Math.cos(th) * rr, y, Math.sin(th) * rr).multiplyScalar(R));
+  }
+  // Puntos brillantes en cada hub.
+  const hubMat = new THREE.PointsMaterial({ color: ACCENT, size: 0.11, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
+  const hubGeo = new THREE.BufferGeometry().setFromPoints(hubs.map((h) => h.clone().multiplyScalar(1.01)));
+  globe.add(new THREE.Points(hubGeo, hubMat));
+
+  const arcMat = new THREE.LineBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending });
   const curves: THREE.QuadraticBezierCurve3[] = [];
-  const ARC_N = 95;
+  const ARC_N = 135;
   let guard = 0;
-  while (curves.length < ARC_N && guard++ < ARC_N * 4) {
-    const a = onSphere(...HUBS[Math.floor(Math.random() * HUBS.length)]);
-    const b = onSphere(...HUBS[Math.floor(Math.random() * HUBS.length)]);
+  while (curves.length < ARC_N && guard++ < ARC_N * 5) {
+    const a = hubs[Math.floor(Math.random() * hubs.length)];
+    const b = hubs[Math.floor(Math.random() * hubs.length)];
     if (a.distanceTo(b) < 0.7) continue;
     // Comba baja: las líneas quedan pegadas a la superficie y cruzan el globo.
-    const mid = a.clone().add(b).multiplyScalar(0.5).normalize().multiplyScalar(R * (1.05 + a.distanceTo(b) * 0.05));
-    const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
-    const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(40));
-    globe.add(new THREE.Line(geo, arcMat));
+    const mid = a.clone().add(b).multiplyScalar(0.5).normalize().multiplyScalar(R * (1.04 + a.distanceTo(b) * 0.05));
+    const curve = new THREE.QuadraticBezierCurve3(a.clone(), mid, b.clone());
+    globe.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(38)), arcMat));
     curves.push(curve);
   }
 
@@ -142,7 +138,7 @@ export function createGlobeScene(canvas: HTMLCanvasElement): GlobeAPI {
     if (!alive) return;
     raf = requestAnimationFrame(frame);
     const t = clock.elapsedTime;
-    globe.rotation.y = t * 0.12;
+    globe.rotation.y = t * 0.17;
     stars.rotation.y = t * 0.01;
     for (let i = 0; i < curves.length; i++) {
       pulseT[i] += pulseSpd[i];
@@ -166,7 +162,7 @@ export function createGlobeScene(canvas: HTMLCanvasElement): GlobeAPI {
       const any = o as unknown as { geometry?: THREE.BufferGeometry };
       if (any.geometry) any.geometry.dispose();
     });
-    [dMat, arcMat, pulseMat, sMat].forEach((m) => m.dispose());
+    [dMat, hubMat, arcMat, pulseMat, sMat].forEach((m) => m.dispose());
     renderer.dispose();
   }
 
