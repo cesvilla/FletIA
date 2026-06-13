@@ -89,20 +89,24 @@ export function createGlobeScene(canvas: HTMLCanvasElement): GlobeAPI {
 
   // Arcos de red entre hubs (grandes círculos elevados).
   const HUBS: [number, number][] = [
-    [-26, -65], [-34, -58], [4, -74], [40, -3], [48, 2], [51, 0],
-    [40, -100], [34, -118], [19, 72], [35, 139], [1, 103], [-33, 151],
-    [55, 37], [25, 55], [-23, 43], [-1, 36], [64, -21],
+    [-26, -65], [-34, -58], [4, -74], [-12, -77], [10, -84], [19, -99],
+    [40, -3], [48, 2], [51, 0], [40, -74], [34, -118], [45, -122], [29, -95],
+    [19, 72], [28, 77], [35, 139], [37, 127], [1, 103], [13, 100], [-6, 106],
+    [-33, 151], [-37, 144], [55, 37], [25, 55], [35, 51], [-23, 43], [-1, 36],
+    [9, 38], [30, 31], [64, -21], [60, 24], [52, 13], [41, 28], [-15, -47], [-23, -46],
   ];
-  const arcMat = new THREE.LineBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending });
+  const arcMat = new THREE.LineBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending });
   const curves: THREE.QuadraticBezierCurve3[] = [];
-  const ARC_N = 30;
-  for (let i = 0; i < ARC_N; i++) {
+  const ARC_N = 95;
+  let guard = 0;
+  while (curves.length < ARC_N && guard++ < ARC_N * 4) {
     const a = onSphere(...HUBS[Math.floor(Math.random() * HUBS.length)]);
     const b = onSphere(...HUBS[Math.floor(Math.random() * HUBS.length)]);
-    if (a.distanceTo(b) < 1.2) continue;
-    const mid = a.clone().add(b).multiplyScalar(0.5).normalize().multiplyScalar(R * (1.15 + a.distanceTo(b) * 0.12));
+    if (a.distanceTo(b) < 0.7) continue;
+    // Comba baja: las líneas quedan pegadas a la superficie y cruzan el globo.
+    const mid = a.clone().add(b).multiplyScalar(0.5).normalize().multiplyScalar(R * (1.05 + a.distanceTo(b) * 0.05));
     const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
-    const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(44));
+    const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(40));
     globe.add(new THREE.Line(geo, arcMat));
     curves.push(curve);
   }

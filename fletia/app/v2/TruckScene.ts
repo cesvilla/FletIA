@@ -25,10 +25,10 @@ export interface SceneAPI {
 // Interpola entre keyframes de cámara según el progreso 0..1.
 interface Key { pos: [number, number, number]; look: [number, number, number]; }
 const KEYS: Key[] = [
-  { pos: [6.5, 2.4, 9.5], look: [0, 1, 0] },     // hero — 3/4 frontal
-  { pos: [-7.5, 1.8, 7.5], look: [-0.5, 1, 0] }, // capacidades — lateral
-  { pos: [0.5, 5.5, 13], look: [0, 1.2, -2] },   // cómo funciona — vista alta
-  { pos: [9, 3, 11], look: [0, 1.6, 0] },        // planes — plano amplio
+  { pos: [8.5, 2.6, 11], look: [-0.6, 1.4, 0] },   // hero — 3/4 frontal, ve capó + lateral
+  { pos: [-9.5, 2.2, 8], look: [-2.5, 1.4, 0] },   // capacidades — lateral del remolque
+  { pos: [0, 6.8, 15.5], look: [-0.6, 1.2, -1] },  // cómo funciona — vista alta
+  { pos: [10.5, 3.2, 12], look: [-0.6, 1.7, 0] },  // planes — plano amplio
 ];
 
 export function createTruckScene(canvas: HTMLCanvasElement): SceneAPI {
@@ -55,30 +55,29 @@ export function createTruckScene(canvas: HTMLCanvasElement): SceneAPI {
   scene.add(fill);
 
   // ---- Materiales ----
-  const bodyMat = new THREE.MeshStandardMaterial({
-    color: 0x1a1613, metalness: 0.85, roughness: 0.34,
-    transparent: true, opacity: 0,
+  const bodyMat = new THREE.MeshStandardMaterial({ // cabina blanca
+    color: 0xe8e2da, metalness: 0.55, roughness: 0.36, transparent: true, opacity: 0,
   });
-  const trailerMat = new THREE.MeshStandardMaterial({
-    color: 0x24201c, metalness: 0.7, roughness: 0.45,
-    transparent: true, opacity: 0,
+  const trailerMat = new THREE.MeshStandardMaterial({ // remolque plata
+    color: 0xcecac4, metalness: 0.66, roughness: 0.42, transparent: true, opacity: 0,
   });
   const accentMat = new THREE.MeshStandardMaterial({
     color: ACCENT, emissive: ACCENT, emissiveIntensity: 0.9,
     metalness: 0.4, roughness: 0.4, transparent: true, opacity: 0,
   });
-  const glassMat = new THREE.MeshStandardMaterial({
-    color: 0x86b8e0, metalness: 0.9, roughness: 0.1,
-    transparent: true, opacity: 0,
+  const glassMat = new THREE.MeshStandardMaterial({ // parabrisas ahumado
+    color: 0x222d36, metalness: 0.9, roughness: 0.08, transparent: true, opacity: 0,
   });
   const tireMat = new THREE.MeshStandardMaterial({
-    color: 0x0a0a0a, metalness: 0.2, roughness: 0.8,
-    transparent: true, opacity: 0,
+    color: 0x0c0c0d, metalness: 0.2, roughness: 0.85, transparent: true, opacity: 0,
+  });
+  const chromeMat = new THREE.MeshStandardMaterial({ // escapes, tanques, paragolpes
+    color: 0xdfe2e6, metalness: 1, roughness: 0.18, transparent: true, opacity: 0,
   });
   const edgeMat = new THREE.LineBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.95 });
-  const rimMat = new THREE.MeshStandardMaterial({ color: CREAM, metalness: 0.9, roughness: 0.3, transparent: true, opacity: 0 });
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0x9a9a9e, metalness: 0.95, roughness: 0.3, transparent: true, opacity: 0 });
 
-  const solidMats = [bodyMat, trailerMat, accentMat, glassMat, tireMat, rimMat];
+  const solidMats = [bodyMat, trailerMat, accentMat, glassMat, tireMat, chromeMat, rimMat];
   const edgeMats: THREE.LineBasicMaterial[] = [edgeMat];
 
   // Caja con bordes alámbricos brillantes superpuestos.
@@ -90,57 +89,92 @@ export function createTruckScene(canvas: HTMLCanvasElement): SceneAPI {
     return m;
   }
 
+  // Cilindro con bordes (escapes, tanques). axis: eje del cilindro.
+  function cyl(r: number, len: number, seg: number, mat: THREE.Material, axis: 'x' | 'y' | 'z') {
+    const g = new THREE.CylinderGeometry(r, r, len, seg);
+    const m = new THREE.Mesh(g, mat);
+    if (axis === 'x') m.rotation.z = Math.PI / 2;
+    if (axis === 'z') m.rotation.x = Math.PI / 2;
+    m.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), edgeMat));
+    return m;
+  }
+
+  // Camión semirremolque americano (capó largo) mirando hacia +X.
   const truck = new THREE.Group();
 
-  // Remolque
-  const trailer = panel(7, 2.7, 2.5, trailerMat);
-  trailer.position.set(-1.6, 1.55, 0);
-  truck.add(trailer);
-
-  // Chasis del remolque
-  const chassis = panel(7, 0.25, 2.2, bodyMat);
-  chassis.position.set(-1.6, 0.35, 0);
+  // Chasis (riel largo)
+  const chassis = panel(11, 0.22, 1.0, chromeMat);
+  chassis.position.set(-1.2, 0.66, 0);
   truck.add(chassis);
 
-  // Cabina (cuerpo)
-  const cab = panel(2.1, 1.9, 2.4, bodyMat);
-  cab.position.set(3.1, 1.15, 0);
-  truck.add(cab);
-  // Techo/cucheta de la cabina
-  const cabTop = panel(1.5, 0.8, 2.3, bodyMat);
-  cabTop.position.set(2.9, 2.35, 0);
-  truck.add(cabTop);
-  // Parabrisas
-  const windshield = panel(0.12, 1.0, 2.0, glassMat);
-  windshield.position.set(4.16, 1.5, 0);
-  truck.add(windshield);
-  // Franja de acento naranja en el remolque
-  const stripe = panel(7.02, 0.28, 2.52, accentMat);
-  stripe.position.set(-1.6, 1.95, 0);
+  // Remolque (caja larga plata) + franja naranja
+  const trailer = panel(7.0, 1.95, 2.5, trailerMat);
+  trailer.position.set(-2.6, 2.05, 0);
+  truck.add(trailer);
+  const stripe = panel(7.02, 0.22, 2.52, accentMat);
+  stripe.position.set(-2.6, 1.52, 0);
   truck.add(stripe);
-  // Parrilla/frente
-  const grille = panel(0.15, 1.2, 2.2, accentMat);
-  grille.position.set(4.2, 0.85, 0);
-  truck.add(grille);
 
-  // Ruedas (cilindros) con llanta crema
+  // Cabina / sleeper (alta) y capó largo (más bajo, adelante)
+  const cab = panel(1.95, 2.15, 2.4, bodyMat);
+  cab.position.set(2.0, 1.82, 0);
+  truck.add(cab);
+  const hood = panel(1.55, 1.15, 2.3, bodyMat);
+  hood.position.set(3.68, 1.32, 0);
+  truck.add(hood);
+
+  // Parabrisas inclinado
+  const wind = panel(0.12, 0.95, 2.05, glassMat);
+  wind.position.set(2.99, 2.12, 0);
+  wind.rotation.z = -0.34;
+  truck.add(wind);
+
+  // Parrilla naranja + paragolpes cromado + faros
+  const grille = panel(0.14, 0.9, 1.9, accentMat);
+  grille.position.set(4.46, 1.32, 0);
+  truck.add(grille);
+  const bumper = panel(0.3, 0.42, 2.5, chromeMat);
+  bumper.position.set(4.52, 0.78, 0);
+  truck.add(bumper);
+  [1, -1].forEach((s) => {
+    const hl = panel(0.1, 0.26, 0.4, accentMat);
+    hl.position.set(4.44, 1.02, s * 0.82);
+    truck.add(hl);
+  });
+
+  // Escapes verticales cromados detrás de la cabina
+  [1, -1].forEach((s) => {
+    const stack = cyl(0.09, 2.7, 14, chromeMat, 'y');
+    stack.position.set(1.02, 2.0, s * 1.3);
+    truck.add(stack);
+  });
+  // Tanques de combustible cromados bajo la cabina
+  [1, -1].forEach((s) => {
+    const tank = cyl(0.33, 1.2, 18, chromeMat, 'x');
+    tank.position.set(1.9, 0.78, s * 1.33);
+    truck.add(tank);
+  });
+
+  // Ruedas
   function wheel(x: number, z: number) {
     const g = new THREE.Group();
-    const tireG = new THREE.CylinderGeometry(0.55, 0.55, 0.4, 22);
+    const tireG = new THREE.CylinderGeometry(0.56, 0.56, 0.36, 22);
     const tire = new THREE.Mesh(tireG, tireMat);
     tire.rotation.x = Math.PI / 2;
     tire.add(new THREE.LineSegments(new THREE.EdgesGeometry(tireG), edgeMat));
-    const hubG = new THREE.CylinderGeometry(0.2, 0.2, 0.42, 12);
+    const hubG = new THREE.CylinderGeometry(0.22, 0.22, 0.38, 12);
     const hub = new THREE.Mesh(hubG, rimMat);
     hub.rotation.x = Math.PI / 2;
     g.add(tire); g.add(hub);
-    g.position.set(x, 0.55, z);
+    g.position.set(x, 0.56, z);
     return g;
   }
-  [[3.4, 1.05], [3.4, -1.05], [-1.2, 1.05], [-1.2, -1.05], [-3.0, 1.05], [-3.0, -1.05]]
-    .forEach(([x, z]) => truck.add(wheel(x, z)));
+  // delantera (steer) · traseras del tractor (2 ejes) · remolque (2 ejes)
+  [3.78, 1.35, 0.55, -3.9, -4.8].forEach((x) => {
+    [1.13, -1.13].forEach((z) => truck.add(wheel(x, z)));
+  });
 
-  truck.position.y = 0;
+  truck.position.set(0, 0, 0);
   scene.add(truck);
 
   // ---- Grilla industrial ----
@@ -219,6 +253,7 @@ export function createTruckScene(canvas: HTMLCanvasElement): SceneAPI {
     accentMat.opacity = fill;
     glassMat.opacity = fill * 0.85;
     tireMat.opacity = fill;
+    chromeMat.opacity = fill;
     rimMat.opacity = fill;
     edgeMat.opacity = 0.95 - fill * 0.45; // las líneas se atenúan al rellenarse
     accentMat.emissiveIntensity = 0.7 + Math.sin(t * 2) * 0.25; // pulso del acento
