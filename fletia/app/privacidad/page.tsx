@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 const SECCIONES = [
   {
     t: '1. Responsable del tratamiento',
-    c: 'FletIA (César Villa), con domicilio en la provincia de Tucumán, Argentina, es responsable del tratamiento de los datos personales recolectados a través de la plataforma. Contacto: hola@flet-ia.com o WhatsApp +54 9 381 642-1849.',
+    c: 'FletIA, con domicilio en Argentina, es responsable del tratamiento de los datos personales recolectados a través de la plataforma. Contacto: hola@flet-ia.com o WhatsApp +54 9 381 642-1849.',
   },
   {
     t: '2. Qué datos recolectamos',
