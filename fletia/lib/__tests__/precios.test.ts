@@ -1,146 +1,117 @@
 import { describe, it, expect } from 'vitest';
 import {
-  mediana, medianaVigente, parseNumAR, parsePreciosSurtidores, factorRegion,
-  type RegistroPrecio,
+  mediana, parseNumAR, splitCsvLine, parseCsvVigentes, medianaFiltrada,
+  baseProvincia, provinciaCSV, type RegistroSurtidor,
 } from '../precios';
 
 describe('mediana', () => {
-  it('lista impar: el del medio', () => {
-    expect(mediana([1, 3, 2])).toBe(2);
-  });
-  it('lista par: promedio redondeado de los dos centrales', () => {
-    expect(mediana([10, 20, 30, 40])).toBe(25);
-  });
-  it('lista vacía: 0', () => {
-    expect(mediana([])).toBe(0);
-  });
-  it('robusta a outliers (a diferencia del promedio)', () => {
-    // un valor disparado no mueve la mediana
-    expect(mediana([2000, 2100, 2200, 2150, 999999])).toBe(2150);
-  });
-});
-
-describe('medianaVigente', () => {
-  const desde = '2026-01-01';
-
-  // Helper para generar registros
-  const reg = (idempresa: string, precio: number, fecha: string): RegistroPrecio =>
-    ({ idempresa, precio, fecha_vigencia: fecha });
-
-  it('toma el precio MÁS RECIENTE por estación (registros ordenados desc)', () => {
-    // 6 estaciones, cada una con su precio reciente primero
-    const records = [
-      reg('e1', 2200, '2026-05-01'), reg('e1', 1500, '2024-01-01'), // vieja se ignora
-      reg('e2', 2300, '2026-05-02'),
-      reg('e3', 2250, '2026-05-03'),
-      reg('e4', 2280, '2026-05-04'),
-      reg('e5', 2210, '2026-05-05'),
-      reg('e6', 2260, '2026-05-06'),
-    ];
-    // medianas de [2200,2300,2250,2280,2210,2260] → ordenado [2200,2210,2250,2260,2280,2300] → (2250+2260)/2 = 2255
-    expect(medianaVigente(records, desde)).toBe(2255);
-  });
-
-  it('descarta estaciones fuera de la ventana temporal (precios viejos 2017)', () => {
-    const records = [
-      reg('a', 50, '2017-01-01'),  // fuera de ventana
-      reg('b', 55, '2018-01-01'),  // fuera de ventana
-      reg('c', 2200, '2026-05-01'),
-      reg('d', 2250, '2026-05-01'),
-      reg('e', 2300, '2026-05-01'),
-      reg('f', 2150, '2026-05-01'),
-      reg('g', 2400, '2026-05-01'),
-    ];
-    // solo c..g (5 estaciones) entran → mediana de [2200,2250,2300,2150,2400] = 2250
-    const m = medianaVigente(records, desde)!;
-    expect(m).toBe(2250);
-    expect(m).toBeGreaterThan(2000); // no contaminado por los $50 de 2017
-  });
-
-  it('devuelve null si hay menos de 5 estaciones válidas', () => {
-    const records = [
-      reg('a', 2200, '2026-05-01'),
-      reg('b', 2250, '2026-05-01'),
-      reg('c', 2300, '2026-05-01'),
-      reg('d', 2150, '2026-05-01'),
-    ]; // solo 4
-    expect(medianaVigente(records, desde)).toBeNull();
-  });
-
-  it('ignora precios fuera de rango (0, negativos, absurdos)', () => {
-    const records = [
-      reg('a', 0, '2026-05-01'),        // inválido
-      reg('b', -100, '2026-05-01'),     // inválido
-      reg('c', 999999, '2026-05-01'),   // inválido (> PRECIO_MAX)
-      reg('d', 2200, '2026-05-01'),
-      reg('e', 2250, '2026-05-01'),
-      reg('f', 2300, '2026-05-01'),
-      reg('g', 2150, '2026-05-01'),
-      reg('h', 2400, '2026-05-01'),
-    ];
-    // solo d..h (5 válidas) → mediana 2250
-    expect(medianaVigente(records, desde)).toBe(2250);
-  });
-
-  it('no cuenta dos veces la misma estación', () => {
-    const records = [
-      reg('a', 2200, '2026-05-05'), reg('a', 2199, '2026-05-04'), reg('a', 2198, '2026-05-03'),
-      reg('b', 2250, '2026-05-01'),
-      reg('c', 2300, '2026-05-01'),
-      reg('d', 2150, '2026-05-01'),
-      reg('e', 2400, '2026-05-01'),
-    ];
-    // a aporta UNA sola vez (2200, la más reciente) → 5 estaciones
-    expect(medianaVigente(records, desde)).toBe(2250);
-  });
-
-  it('parsea precios que vienen como string', () => {
-    const records: RegistroPrecio[] = [
-      { idempresa: 'a', precio: '2200', fecha_vigencia: '2026-05-01' },
-      { idempresa: 'b', precio: '2250', fecha_vigencia: '2026-05-01' },
-      { idempresa: 'c', precio: '2300', fecha_vigencia: '2026-05-01' },
-      { idempresa: 'd', precio: '2150', fecha_vigencia: '2026-05-01' },
-      { idempresa: 'e', precio: '2400', fecha_vigencia: '2026-05-01' },
-    ];
-    expect(medianaVigente(records, desde)).toBe(2250);
-  });
+  it('lista impar: el del medio', () => expect(mediana([1, 3, 2])).toBe(2));
+  it('lista par: promedio redondeado de los dos centrales', () => expect(mediana([10, 20, 30, 40])).toBe(25));
+  it('lista vacía: 0', () => expect(mediana([])).toBe(0));
+  it('robusta a outliers', () => expect(mediana([2000, 2100, 2200, 2150, 999999])).toBe(2150));
 });
 
 describe('parseNumAR', () => {
-  it('entero plano', () => expect(parseNumAR('2115')).toBe(2115));
-  it('coma decimal', () => expect(parseNumAR('300,00')).toBe(300));
-  it('punto decimal', () => expect(parseNumAR('168.40')).toBeCloseTo(168.4));
+  it('entero plano', () => expect(parseNumAR('2190')).toBe(2190));
+  it('decimal con punto', () => expect(parseNumAR('1320.721')).toBeCloseTo(1320.721));
+  it('decimal con coma', () => expect(parseNumAR('300,00')).toBe(300));
   it('limpia $ y espacios', () => expect(parseNumAR(' $ 2323 ')).toBe(2323));
   it('vacío → null', () => expect(parseNumAR('  ')).toBeNull());
 });
 
-describe('factorRegion', () => {
-  it('NOA (Tucumán) ~ +9%', () => expect(factorRegion('Tucumán')).toBeCloseTo(1.09));
-  it('acepta sin acento / mayúsculas', () => expect(factorRegion('SALTA')).toBeCloseTo(1.09));
-  it('Centro = 1.0', () => expect(factorRegion('Buenos Aires')).toBe(1.0));
-  it('sin provincia → asume NOA (base de clientes)', () => expect(factorRegion(null)).toBeCloseTo(1.09));
-  it('provincia desconocida → 1.0', () => expect(factorRegion('Narnia')).toBe(1.0));
+describe('splitCsvLine', () => {
+  it('campos simples', () => {
+    expect(splitCsvLine('a,b,c')).toEqual(['a', 'b', 'c']);
+  });
+  it('respeta comas dentro de comillas (geojson)', () => {
+    const linea = 'YPF,Av. Siempre Viva 123,"{""type"":""Point"",""coordinates"":[-58.5,-34.6]}",fin';
+    expect(splitCsvLine(linea)).toEqual([
+      'YPF', 'Av. Siempre Viva 123', '{"type":"Point","coordinates":[-58.5,-34.6]}', 'fin',
+    ]);
+  });
+  it('campo vacío entre comas', () => expect(splitCsvLine('a,,c')).toEqual(['a', '', 'c']));
 });
 
-describe('parsePreciosSurtidores', () => {
-  const html = `
-    <table>
-      <tr><td>2026</td><td>Enero</td><td>Febrero</td><td>Marzo</td><td>Abril</td><td>Mayo</td><td>Junio</td><td>Julio</td><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
-      <tr><td><strong>Super</strong></td><td>1566</td><td>1609</td><td>1999</td><td>1999</td><td>2037</td><td>2030</td><td> </td><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
-      <tr><td><strong>Gasoil</strong></td><td>1601</td><td>1658</td><td>2065</td><td>2060</td><td>2106</td><td>2115</td><td> </td><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
-      <tr><td><strong>Euro</strong></td><td>1809</td><td>1861</td><td>2271</td><td>2266</td><td>2316</td><td>2323</td><td> </td><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
-    </table>`;
+describe('parseCsvVigentes', () => {
+  const csv = [
+    'indice_tiempo,idempresa,cuit,empresa,direccion,localidad,provincia,region,idproducto,producto,idtipohorario,tipohorario,precio,fecha_vigencia,idempresabandera,empresabandera,latitud,longitud,geojson',
+    '2026-06,1,30-1-9,EST UNO,"Calle 1, esq 2",SMT,TUCUMAN,NOA,19,Gas Oil Grado 2,2,Diurno,2400,2026-06-10 10:00:00,1,YPF,-26,-65,"{""type"":""Point""}"',
+    '2026-06,2,30-2-9,EST DOS,Calle 3,SMT,TUCUMAN,NOA,19,Gas Oil Grado 2,2,Diurno,2380,2026-06-09 10:00:00,2,SHELL,-26,-65,"{""type"":""Point""}"',
+    '2026-06,3,30-3-9,EST TRES,Calle 4,SMT,TUCUMAN,NOA,19,Gas Oil Grado 2,2,Diurno,50,2026-06-08 10:00:00,3,PUMA,-26,-65,"{""type"":""Point""}"',
+  ].join('\n');
 
-  it('toma el mes pedido (Junio idx 5)', () => {
-    expect(parsePreciosSurtidores(html, 2026, 5)).toEqual({ comun: 2115, premium: 2323 });
+  it('extrae provincia/producto/precio/fecha y respeta la coma en dirección', () => {
+    const recs = parseCsvVigentes(csv);
+    expect(recs.length).toBe(2); // la fila con precio 50 (fuera de rango) se descarta
+    expect(recs[0]).toMatchObject({ provincia: 'TUCUMAN', producto: 'Gas Oil Grado 2', idempresa: '1', precio: 2400, fecha: '2026-06-10' });
   });
 
-  it('si el mes en curso está vacío, retrocede al último cargado', () => {
-    // Julio (idx 6) está vacío → debe devolver Junio
-    expect(parsePreciosSurtidores(html, 2026, 6)).toEqual({ comun: 2115, premium: 2323 });
+  it('CSV sin header válido → []', () => expect(parseCsvVigentes('foo,bar')).toEqual([]));
+});
+
+describe('medianaFiltrada', () => {
+  const reg = (id: string, provincia: string, producto: string, precio: number, fecha: string): RegistroSurtidor =>
+    ({ idempresa: id, provincia, producto, precio, fecha });
+  const G2 = 'Gas Oil Grado 2';
+  const recs: RegistroSurtidor[] = [
+    reg('a', 'TUCUMAN', G2, 2400, '2026-06-10'),
+    reg('b', 'TUCUMAN', G2, 2380, '2026-06-09'),
+    reg('a', 'TUCUMAN', G2, 1000, '2024-01-01'), // misma estación 'a', vieja → ignorada
+    reg('c', 'TUCUMAN', G2, 2420, '2026-06-08'),
+    reg('d', 'TUCUMAN', G2, 2360, '2026-05-30'),
+    reg('e', 'TUCUMAN', G2, 2410, '2026-06-05'),
+    reg('f', 'TUCUMAN', G2, 2390, '2026-06-04'),
+    reg('g', 'TUCUMAN', G2, 2370, '2026-06-03'),
+    reg('h', 'TUCUMAN', G2, 2440, '2026-06-02'),
+    reg('viejo', 'TUCUMAN', G2, 2000, '2023-01-01'), // fuera de ventana
+  ];
+
+  it('mediana por estación dentro de la ventana, dedupe e ignora viejas', () => {
+    const m = medianaFiltrada(recs, r => r.provincia === 'TUCUMAN' && r.producto === G2, '2026-03-01');
+    // 8 estaciones a..h → [2360,2370,2380,2390,2400,2410,2420,2440] → (2390+2400)/2 = 2395
+    expect(m).not.toBeNull();
+    expect(m!.n).toBe(8);
+    expect(m!.med).toBe(2395);
   });
 
-  it('null si no existe la tabla del año', () => {
-    expect(parsePreciosSurtidores(html, 2099, 0)).toBeNull();
+  it('null si no llega al mínimo de estaciones (8)', () => {
+    const m = medianaFiltrada(recs, r => r.provincia === 'TUCUMAN' && r.producto === G2, '2026-06-05');
+    // solo a,b,c,d,e (fecha ≥ 06-05) → 5 < 8 estaciones
+    expect(m).toBeNull();
   });
+});
+
+describe('baseProvincia (ventana relativa a hoy + fallback regional)', () => {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const reg = (id: string, provincia: string, producto: string, precio: number): RegistroSurtidor =>
+    ({ idempresa: id, provincia, producto, precio, fecha: hoy });
+  const G2 = 'Gas Oil Grado 2', G3 = 'Gas Oil Grado 3';
+
+  it('usa la provincia exacta cuando hay muestra (≥8)', () => {
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    const recs = [
+      ...ids.map((id, i) => reg(id, 'TUCUMAN', G2, 2360 + i * 10)), // 2360..2430 → med 2395
+      ...ids.map((id, i) => reg(id, 'TUCUMAN', G3, 2630 + i * 10)), // 2630..2700 → med 2665
+    ];
+    const base = baseProvincia(recs, 'TUCUMAN');
+    expect(base).not.toBeNull();
+    expect(base!.comun).toBe(2395);
+    expect(base!.premium).toBe(2665);
+  });
+
+  it('cae a la mediana de la REGIÓN cuando la provincia es rala', () => {
+    // JUJUY (NOA) sin muestra propia; hay 8 estaciones NOA repartidas en la región
+    const provsNOA = ['SALTA', 'TUCUMAN', 'CATAMARCA', 'SANTIAGO DEL ESTERO', 'SALTA', 'TUCUMAN', 'CATAMARCA', 'LA RIOJA'];
+    const recs = provsNOA.map((p, i) => reg('e' + i, p, G2, 2380 + i * 5));
+    const base = baseProvincia(recs, 'JUJUY');
+    expect(base).not.toBeNull();
+    expect(base!.comun).toBeGreaterThan(2300);
+  });
+});
+
+describe('provinciaCSV (nombre UI → nombre del CSV)', () => {
+  it('Tucumán → TUCUMAN', () => expect(provinciaCSV('Tucumán')).toBe('TUCUMAN'));
+  it('CABA → CAPITAL FEDERAL', () => expect(provinciaCSV('CABA')).toBe('CAPITAL FEDERAL'));
+  it('Córdoba → CORDOBA', () => expect(provinciaCSV('Córdoba')).toBe('CORDOBA'));
+  it('sin provincia → default (TUCUMAN)', () => expect(provinciaCSV(null)).toBe('TUCUMAN'));
 });

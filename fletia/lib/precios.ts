@@ -1,47 +1,52 @@
-// ─── Precios de gasoil — fuente viva + ajuste regional ─────────────────────────
+// ─── Precios de gasoil — CSV oficial de la Secretaría de Energía ───────────────
 //
-// HISTORIA (importante): la fuente original era el dataset oficial de la Secretaría
-// de Energía ("Precios en surtidor"). En jun-2026 quedó INSERVIBLE:
-//   • el recurso "Precios vigentes" pasó a datastore_active=false → la API da 404.
-//   • el recurso "Precios históricos" quedó congelado (último dato ~jul-2025), o sea
-//     ~40% por debajo del precio real → no sirve para el precio de hoy.
-// Resultado: la app caía siempre al fallback hardcodeado y mostraba ~$100 de menos.
+// FUENTE: dataset "Precios en surtidor — Resolución 314/2016", recurso "Precios
+// vigentes". La API `datastore_search` quedó deshabilitada (404), PERO el archivo
+// CSV descargable sigue actualizándose A DIARIO (last_modified = hoy). Lo bajamos,
+// lo parseamos y calculamos la MEDIANA real por PROVINCIA para gasoil común
+// (Gas Oil Grado 2) y premium (Gas Oil Grado 3), en AR$/litro.
 //
-// FUENTE ACTUAL: surtidores.com.ar/precios/ publica una tabla mensual NACIONAL por
-// tipo de combustible (Súper / Premium / Gasoil / Euro), actualizada al mes en curso.
-// De ahí sacamos el precio NACIONAL vigente de Gasoil común ("Gasoil") y premium
-// ("Euro").  Como es un único valor nacional, le aplicamos:
-//   1) un delta chico por bandera (YPF/Shell/Axion/Puma) para las tarjetas de la UI, y
-//   2) un FACTOR REGIONAL por provincia (el NOA es ~9% más caro que el promedio país;
-//      validado: nacional jun-2026 $2115 × 1.09 ≈ $2305 = precio real Tucumán).
+// ⚠️ El CSV "vigentes" incluye estaciones que declararon su precio hace mucho y no
+// lo actualizaron (su último precio sigue "vigente"). Promediar todo da valores
+// absurdos (mediana cruda Tucumán $1326 vs real ~$2395). Por eso filtramos a una
+// VENTANA temporal: solo estaciones que actualizaron en los últimos N días, con
+// dedupe por estación. Si una provincia tiene muestra chica, se ensancha la ventana
+// y, si sigue corta, cae a la mediana de su REGIÓN y luego nacional.
 //
-// `mediana` y `medianaVigente` se conservan (utilidades puras testeadas) aunque la
-// estrategia de mediana sobre el dataset oficial ya no se use.
+// El base se cachea por día y por provincia en Supabase. La descarga (8.8 MB) la
+// hace el cron (o el primer request que encuentre la caché vacía); las páginas
+// leen caché. Si todo falla, se usa REFERENCIA × factor regional.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-const SURTIDORES_URL = 'https://surtidores.com.ar/precios/';
-const MESES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-];
+const CSV_URL =
+  'https://datos.energia.gob.ar/dataset/1c181390-5045-475e-94dc-410429be4b17/resource/' +
+  '80ac25de-a44a-4445-9215-090cf55cfda5/download/precios-en-surtidor-resolucin-3142016.csv';
 
-// Rango sanity-check para un precio de gasoil en AR$/litro (descarta datos corruptos)
+const PRODUCTO_COMUN = 'Gas Oil Grado 2';
+const PRODUCTO_PREMIUM = 'Gas Oil Grado 3';
+
+// Ventanas (en días) que se prueban en orden hasta juntar muestra suficiente.
+const VENTANAS_DIAS = [120, 240, 400];
+// Mínimo de estaciones para confiar en la mediana propia de una provincia. Si una
+// provincia chica no llega (ej. Salta/Jujuy, con pocas estaciones y outliers que
+// rompen la mediana), cae a la mediana de su REGIÓN, bien muestreada y estable.
+const MIN_ESTACIONES = 8;
 const PRECIO_MIN = 300;
 const PRECIO_MAX = 100000;
 
 export interface PrecioCombustible {
   empresa: string;
   tipo: string;     // 'Gasoil Común' | 'Gasoil Premium'
-  precio: number;   // AR$/litro (ya con ajuste regional)
+  precio: number;   // AR$/litro
   fecha: string;    // YYYY-MM-DD
 }
 
 export type FuentePrecios = 'oficial' | 'cache' | 'referencia';
 
-// ─── Banderas: delta aditivo respecto del precio nacional base (≈ YPF) ─────────
-// La fuente da un solo número nacional; estos deltas reparten las 4 banderas con
-// spreads realistas (tomados de precios de lista típicos). YPF = base (delta 0).
+// ─── Banderas: delta aditivo respecto del precio base de la provincia (≈ YPF) ──
+// El CSV no da muestra confiable por bandera+provincia (muy ralo), así que sobre
+// la mediana provincial repartimos las 4 banderas con spreads típicos.
 const DELTA_MARCA: Record<string, { comun: number; premium: number }> = {
   'YPF':   { comun: 0,  premium: 0   },
   'Shell': { comun: 0,  premium: 125 },
@@ -50,52 +55,44 @@ const DELTA_MARCA: Record<string, { comun: number; premium: number }> = {
 };
 const ORDEN_MARCAS = ['YPF', 'Shell', 'Axion', 'Puma'];
 
-// ─── Factor regional por provincia ────────────────────────────────────────────
-// El precio de surtidor varía por región (logística, distancia a refinerías/puertos,
-// combustible patagónico, etc.). NOA validado con dato oficial (~+9%). Las demás son
-// estimaciones conservadoras y se pueden afinar. CENTRO/Pampeana = referencia (1.0).
-export const REGIONES: Record<string, number> = {
-  NOA: 1.09,        // Tucumán, Salta, Jujuy, Catamarca, Sgo. del Estero (validado)
-  NEA: 1.07,        // Chaco, Corrientes, Misiones, Formosa
-  CUYO: 1.04,       // Mendoza, San Juan, San Luis
-  PATAGONIA: 1.06,  // Neuquén, Río Negro, Chubut, Santa Cruz, T. del Fuego, La Pampa
-  CENTRO: 1.0,      // CABA, Bs As, Córdoba, Santa Fe, Entre Ríos (referencia)
-};
-
-// Provincia (normalizada) → región. La default es CENTRO (factor 1.0).
-const PROVINCIA_REGION: Record<string, keyof typeof REGIONES> = {
-  TUCUMAN: 'NOA', SALTA: 'NOA', JUJUY: 'NOA', CATAMARCA: 'NOA', 'SANTIAGO DEL ESTERO': 'NOA',
-  CHACO: 'NEA', CORRIENTES: 'NEA', MISIONES: 'NEA', FORMOSA: 'NEA',
-  MENDOZA: 'CUYO', 'SAN JUAN': 'CUYO', 'SAN LUIS': 'CUYO',
-  NEUQUEN: 'PATAGONIA', 'RIO NEGRO': 'PATAGONIA', CHUBUT: 'PATAGONIA',
+// ─── Provincias / regiones (nombres EXACTOS del CSV oficial) ───────────────────
+const REGION_DE: Record<string, string> = {
+  'BUENOS AIRES': 'PAMPEANA', 'CAPITAL FEDERAL': 'PAMPEANA',
+  'CORDOBA': 'CENTRO', 'SANTA FE': 'CENTRO', 'ENTRE RIOS': 'CENTRO',
+  'TUCUMAN': 'NOA', 'SALTA': 'NOA', 'JUJUY': 'NOA', 'CATAMARCA': 'NOA',
+  'SANTIAGO DEL ESTERO': 'NOA', 'LA RIOJA': 'NOA',
+  'CHACO': 'NEA', 'CORRIENTES': 'NEA', 'MISIONES': 'NEA', 'FORMOSA': 'NEA',
+  'MENDOZA': 'CUYO', 'SAN JUAN': 'CUYO', 'SAN LUIS': 'CUYO',
+  'NEUQUEN': 'PATAGONIA', 'RIO NEGRO': 'PATAGONIA', 'CHUBUT': 'PATAGONIA',
   'SANTA CRUZ': 'PATAGONIA', 'TIERRA DEL FUEGO': 'PATAGONIA', 'LA PAMPA': 'PATAGONIA',
-  CABA: 'CENTRO', 'CIUDAD AUTONOMA DE BUENOS AIRES': 'CENTRO', 'BUENOS AIRES': 'CENTRO',
-  CORDOBA: 'CENTRO', 'SANTA FE': 'CENTRO', 'ENTRE RIOS': 'CENTRO',
 };
+const PROVINCIAS_CSV = Object.keys(REGION_DE);
 
 // Provincia por defecto cuando la cuenta no la tiene seteada (base de clientes = NOA).
 export const PROVINCIA_DEFAULT = 'Tucumán';
 
-// Lista de provincias para el selector de la UI (orden alfabético).
-export const PROVINCIAS_AR = [
-  'Buenos Aires', 'CABA', 'Catamarca', 'Chaco', 'Chubut', 'Córdoba', 'Corrientes',
-  'Entre Ríos', 'Formosa', 'Jujuy', 'La Pampa', 'La Rioja', 'Mendoza', 'Misiones',
-  'Neuquén', 'Río Negro', 'Salta', 'San Juan', 'San Luis', 'Santa Cruz', 'Santa Fe',
-  'Santiago del Estero', 'Tierra del Fuego', 'Tucumán',
-];
+// Factor regional SOLO para el fallback REFERENCIA (cuando el CSV no responde).
+const FACTOR_REGION: Record<string, number> = {
+  NOA: 1.13, NEA: 1.10, CUYO: 1.06, PATAGONIA: 1.08, CENTRO: 1.02, PAMPEANA: 1.0,
+};
+const REFERENCIA_NACIONAL = { comun: 2240, premium: 2500 }; // mediana PAMPEANA jun-2026
 
 function normalizar(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
 }
 
-// Factor regional para una provincia (default 1.0 si no se reconoce).
-export function factorRegion(provincia?: string | null): number {
-  if (!provincia) return REGIONES.NOA; // sin provincia → asumimos NOA (base de clientes)
-  const region = PROVINCIA_REGION[normalizar(provincia)];
-  return region ? REGIONES[region] : 1.0;
+// Nombre de provincia de la UI → nombre exacto del CSV.
+const ALIAS_PROVINCIA: Record<string, string> = {
+  'CABA': 'CAPITAL FEDERAL',
+  'CIUDAD AUTONOMA DE BUENOS AIRES': 'CAPITAL FEDERAL',
+  'CIUDAD DE BUENOS AIRES': 'CAPITAL FEDERAL',
+};
+export function provinciaCSV(ui?: string | null): string {
+  const n = normalizar(ui || PROVINCIA_DEFAULT);
+  return ALIAS_PROVINCIA[n] || n;
 }
 
-// ─── Utilidades puras (conservadas; testeadas en precios.test.ts) ──────────────
+// ─── Utilidades ────────────────────────────────────────────────────────────────
 export function mediana(nums: number[]): number {
   if (nums.length === 0) return 0;
   const s = [...nums].sort((a, b) => a - b);
@@ -103,176 +100,236 @@ export function mediana(nums: number[]): number {
   return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
 }
 
-export interface RegistroPrecio {
-  precio: number | string;
-  fecha_vigencia?: string;
-  idempresa?: string | number;
-}
-
-// LEGACY: mediana del precio vigente por estación (estrategia del viejo dataset SE).
-// Sin uso en runtime; se conserva por los tests y por si vuelve una fuente con detalle.
-const VENTANA_MESES = 9;
-const MIN_ESTACIONES = 5;
-export function medianaVigente(records: RegistroPrecio[], desdeISO: string): number | null {
-  const porEstacion = new Map<string, number>();
-  for (const r of records) {
-    const fecha = String(r.fecha_vigencia || '');
-    if (fecha < desdeISO) continue;
-    const id = String(r.idempresa ?? '');
-    if (porEstacion.has(id)) continue;
-    const precio = Number(r.precio);
-    if (Number.isFinite(precio) && precio >= PRECIO_MIN && precio <= PRECIO_MAX) {
-      porEstacion.set(id, precio);
-    }
-  }
-  if (porEstacion.size < MIN_ESTACIONES) return null;
-  const med = mediana([...porEstacion.values()]);
-  return med >= PRECIO_MIN && med <= PRECIO_MAX ? med : null;
-}
-void VENTANA_MESES;
-
-// ─── Parseo de surtidores.com.ar ──────────────────────────────────────────────
-
-// Parsea un número en formato AR ("2115", "300,00", "168.40", "20,79") → número.
+// Parsea un número en formato AR ("2190", "1320.721", "300,00") → número.
 export function parseNumAR(raw: string): number | null {
-  let s = (raw || '').replace(/\s|&nbsp;|\$/g, '').trim();
+  let s = (raw || '').replace(/\s|\$/g, '').trim();
   if (!s) return null;
-  // Si tiene coma decimal (ej "300,00" / "20,79"), tratarla como punto decimal.
-  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  if (s.includes(',') && !s.includes('.')) s = s.replace(',', '.');
+  else if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.');
   const n = parseFloat(s);
   return Number.isFinite(n) ? n : null;
 }
 
-// Extrae de la tabla del AÑO `anio` el precio del mes `mesIdx0` (0=Enero) para
-// "Gasoil" (común) y "Euro" (premium). Si el mes en curso está vacío (todavía no
-// publicado), retrocede mes a mes hasta encontrar el último valor cargado.
-// PURA (sin red) para poder testearla.
-export function parsePreciosSurtidores(
-  html: string,
-  anio: number,
-  mesIdx0: number,
-): { comun: number; premium: number } | null {
-  const tablas = html.match(/<table[\s\S]*?<\/table>/gi) || [];
-  const limpiar = (c: string) => c.replace(/<[^>]+>/g, '').trim();
-
-  for (const tabla of tablas) {
-    const filas = [...tabla.matchAll(/<tr>([\s\S]*?)<\/tr>/gi)].map(m => m[1]);
-    if (filas.length < 2) continue;
-    const celdasDe = (fila: string) =>
-      [...fila.matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].map(m => limpiar(m[1]));
-
-    const header = celdasDe(filas[0]);
-    if (header[0] !== String(anio)) continue; // no es la tabla de este año
-
-    const valorEnFila = (etiqueta: RegExp): number | null => {
-      const fila = filas.find(f => etiqueta.test(celdasDe(f)[0] || ''));
-      if (!fila) return null;
-      const celdas = celdasDe(fila); // celdas[0] = nombre, celdas[1..12] = meses
-      for (let m = mesIdx0; m >= 0; m--) {
-        const v = parseNumAR(celdas[m + 1] || '');
-        if (v && v >= PRECIO_MIN && v <= PRECIO_MAX) return v;
-      }
-      return null;
-    };
-
-    const comun = valorEnFila(/^gasoil$/i);
-    const premium = valorEnFila(/^euro$/i);
-    if (comun && premium) return { comun, premium };
-    if (comun) return { comun, premium: Math.round(comun * 1.10) }; // premium ≈ +10% si falta
+// Parsea una línea CSV respetando comillas dobles (campo geojson trae comas).
+export function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else inQ = false;
+      } else cur += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === ',') { out.push(cur); cur = ''; }
+    else cur += ch;
   }
-  return null;
+  out.push(cur);
+  return out;
 }
 
-// Trae el precio nacional vigente (común + premium) de surtidores.com.ar.
-// Devuelve null si la página no responde o no se puede parsear.
-async function fetchBaseNacional(): Promise<{ comun: number; premium: number } | null> {
+export interface RegistroSurtidor {
+  provincia: string;
+  producto: string;
+  idempresa: string;
+  precio: number;
+  fecha: string;      // YYYY-MM-DD
+}
+
+// Parsea el CSV oficial → registros mínimos (solo los campos que usamos).
+export function parseCsvVigentes(text: string): RegistroSurtidor[] {
+  const lineas = text.split(/\r?\n/).filter(l => l.length > 0);
+  if (lineas.length < 2) return [];
+  const head = splitCsvLine(lineas[0]).map(h => h.trim());
+  const iProv = head.indexOf('provincia');
+  const iProd = head.indexOf('producto');
+  const iEmp = head.indexOf('idempresa');
+  const iPre = head.indexOf('precio');
+  const iFec = head.indexOf('fecha_vigencia');
+  if (iProv < 0 || iProd < 0 || iPre < 0 || iFec < 0) return [];
+
+  const out: RegistroSurtidor[] = [];
+  for (let i = 1; i < lineas.length; i++) {
+    const c = splitCsvLine(lineas[i]);
+    const precio = parseNumAR(c[iPre] || '');
+    if (precio == null || precio < PRECIO_MIN || precio > PRECIO_MAX) continue;
+    out.push({
+      provincia: (c[iProv] || '').trim(),
+      producto: (c[iProd] || '').trim(),
+      idempresa: (c[iEmp] || '').trim(),
+      precio,
+      fecha: (c[iFec] || '').slice(0, 10),
+    });
+  }
+  return out;
+}
+
+function isoMenosDias(dias: number): string {
+  return new Date(Date.now() - dias * 86_400_000).toISOString().slice(0, 10);
+}
+
+// Mediana del precio reciente por estación, sobre los registros que cumplen `pred`.
+// Dedupe por idempresa (primer match = más reciente si vienen ordenados; el orden
+// no importa para la mediana mientras tomemos un precio por estación).
+export function medianaFiltrada(
+  records: RegistroSurtidor[],
+  pred: (r: RegistroSurtidor) => boolean,
+  desdeISO: string,
+): { med: number; n: number } | null {
+  const porEstacion = new Map<string, number>();
+  for (const r of records) {
+    if (r.fecha < desdeISO || !pred(r)) continue;
+    if (!porEstacion.has(r.idempresa)) porEstacion.set(r.idempresa, r.precio);
+  }
+  if (porEstacion.size < MIN_ESTACIONES) return null;
+  return { med: mediana([...porEstacion.values()]), n: porEstacion.size };
+}
+
+// Base común+premium de una provincia: ventana adaptativa → región → nacional.
+export function baseProvincia(
+  records: RegistroSurtidor[],
+  provCSV: string,
+): { comun: number; premium: number } | null {
+  const region = REGION_DE[provCSV];
+
+  // Ventana reciente: clave para no mezclar precios de meses viejos (inflación).
+  const reciente = isoMenosDias(VENTANAS_DIAS[0]);
+  const medConFallback = (producto: string): number | null => {
+    // 1) provincia exacta, ventana reciente
+    let m = medianaFiltrada(records, r => r.provincia === provCSV && r.producto === producto, reciente);
+    if (m) return m.med;
+    // 2) región, ventana reciente — un precio REGIONAL ACTUAL es mejor que uno
+    //    provincial viejo (provincias ralas como Salta/Jujuy caen acá).
+    if (region) {
+      m = medianaFiltrada(records, r => REGION_DE[r.provincia] === region && r.producto === producto, reciente);
+      if (m) return m.med;
+    }
+    // 3) nacional, ventana reciente
+    m = medianaFiltrada(records, r => r.producto === producto, reciente);
+    if (m) return m.med;
+    // 4) extremo: la propia provincia ensanchando la ventana (datos viejos, último recurso)
+    for (const dias of VENTANAS_DIAS.slice(1)) {
+      m = medianaFiltrada(records, r => r.provincia === provCSV && r.producto === producto, isoMenosDias(dias));
+      if (m) return m.med;
+    }
+    return null;
+  };
+
+  const comun = medConFallback(PRODUCTO_COMUN);
+  if (comun == null) return null;
+  const premium = medConFallback(PRODUCTO_PREMIUM) ?? Math.round(comun * 1.11);
+  return { comun, premium };
+}
+
+// Arma las 8 filas (4 banderas × común/premium) para una provincia a partir del base.
+type FilaBase = Omit<PrecioCombustible, 'fecha'> & { provincia: string };
+function filasDesdeBase(provCSV: string, base: { comun: number; premium: number }): FilaBase[] {
+  return ORDEN_MARCAS.flatMap(empresa => {
+    const d = DELTA_MARCA[empresa];
+    return [
+      { empresa, tipo: 'Gasoil Común',   precio: Math.round(base.comun + d.comun),   provincia: provCSV },
+      { empresa, tipo: 'Gasoil Premium', precio: Math.round(base.premium + d.premium), provincia: provCSV },
+    ];
+  });
+}
+
+// Fallback de referencia (cuando el CSV no responde): nacional × factor regional.
+function filasReferencia(provCSV: string): Array<Omit<PrecioCombustible, 'fecha'> & { provincia: string }> {
+  const factor = FACTOR_REGION[REGION_DE[provCSV]] ?? 1.0;
+  return filasDesdeBase(provCSV, {
+    comun: Math.round(REFERENCIA_NACIONAL.comun * factor),
+    premium: Math.round(REFERENCIA_NACIONAL.premium * factor),
+  });
+}
+
+async function fetchCsv(): Promise<string | null> {
   try {
-    const res = await fetch(SURTIDORES_URL, {
+    const res = await fetch(CSV_URL, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; FletIA/1.0)' },
-      signal: AbortSignal.timeout(12000),
-      next: { revalidate: 60 * 60 * 6 }, // el dato cambia, a lo sumo, una vez al día
+      signal: AbortSignal.timeout(20000),
+      next: { revalidate: 60 * 60 * 6 },
     });
     if (!res.ok) return null;
-    const html = await res.text();
-    const hoy = new Date();
-    // Intentar mes/año actual; si la tabla del año aún no existe, probar año anterior.
-    return (
-      parsePreciosSurtidores(html, hoy.getFullYear(), hoy.getMonth()) ||
-      parsePreciosSurtidores(html, hoy.getFullYear() - 1, 11)
-    );
+    const txt = await res.text();
+    return txt.length > 1000 ? txt : null;
   } catch {
     return null;
   }
 }
 
-// Valor de referencia nacional si la fuente cae (mediana nacional jun-2026).
-const REFERENCIA_NACIONAL = { comun: 2115, premium: 2323 };
+// Calcula las filas de TODAS las provincias a partir del CSV (1 sola descarga).
+function computarTodas(records: RegistroSurtidor[], hoy: string): Array<PrecioCombustible & { provincia: string }> {
+  const filas: Array<PrecioCombustible & { provincia: string }> = [];
+  for (const provCSV of PROVINCIAS_CSV) {
+    const base = baseProvincia(records, provCSV);
+    if (!base) continue;
+    for (const f of filasDesdeBase(provCSV, base)) {
+      filas.push({ ...f, fecha: hoy });
+    }
+  }
+  return filas;
+}
 
-// Arma las 8 filas (4 banderas × común/premium) a partir del precio nacional base.
-function filasDesdeBase(base: { comun: number; premium: number }): Omit<PrecioCombustible, 'fecha'>[] {
-  return ORDEN_MARCAS.flatMap(empresa => {
-    const d = DELTA_MARCA[empresa];
-    return [
-      { empresa, tipo: 'Gasoil Común',   precio: Math.round(base.comun + d.comun) },
-      { empresa, tipo: 'Gasoil Premium', precio: Math.round(base.premium + d.premium) },
-    ];
+function dedupePorEmpresaTipo<T extends { empresa: string; tipo: string }>(rows: T[]): T[] {
+  const vistos = new Set<string>();
+  return rows.filter(r => {
+    const k = `${r.empresa}|${r.tipo}`;
+    if (vistos.has(k)) return false;
+    vistos.add(k);
+    return true;
   });
 }
 
 // Devuelve los precios de hoy para una provincia. Estrategia:
-//   1) si hay caché NACIONAL en Supabase para hoy → la usa (rápido, sin red externa)
-//   2) si no, scrapea surtidores.com.ar y cachea el base nacional del día
-//   3) si la fuente falla, usa el valor de referencia (sin cachear, para reintentar)
-//   4) sobre el base nacional aplica el FACTOR REGIONAL de la provincia
+//   1) caché del día para esa provincia → la usa (rápido)
+//   2) si no, y `fetchSiFalta`, descarga el CSV oficial UNA vez, calcula TODAS las
+//      provincias, cachea todo y devuelve la pedida
+//   3) si la descarga falla o `fetchSiFalta=false`, usa REFERENCIA × factor regional
 //
-// La caché guarda el base NACIONAL (factor 1.0); el ajuste regional se aplica en
-// memoria al leer → no requiere columna nueva ni migración.
+// Las páginas pasan `fetchSiFalta:false` (leen caché, no bloquean en la descarga de
+// 8.8 MB); el cron y la API de cambio de provincia la dejan en `true`.
 export async function getPreciosDeHoy(
   db: SupabaseClient,
   provincia?: string | null,
-): Promise<{ precios: PrecioCombustible[]; fuente: FuentePrecios; provincia: string; factor: number }> {
+  opts: { fetchSiFalta?: boolean } = {},
+): Promise<{ precios: PrecioCombustible[]; fuente: FuentePrecios; provincia: string }> {
+  const { fetchSiFalta = true } = opts;
   const hoy = new Date().toISOString().split('T')[0];
-  const factor = factorRegion(provincia);
-  const provNom = provincia || PROVINCIA_DEFAULT;
+  const provNom = provinciaCSV(provincia);
 
-  const aplicarRegion = (rows: Omit<PrecioCombustible, 'fecha'>[]): PrecioCombustible[] =>
-    rows.map(r => ({ ...r, precio: Math.round(r.precio * factor), fecha: hoy }));
-
-  // 1) caché nacional del día
+  // 1) caché del día para esta provincia
   const { data: cache } = await db
     .from('precio_combustible')
     .select('empresa, tipo, precio')
-    .eq('fecha', hoy);
+    .eq('fecha', hoy)
+    .eq('provincia', provNom);
 
   if (cache && cache.length > 0) {
-    // Dedupe defensivo por empresa+tipo (la tabla no tiene unique; corridas viejas
-    // pudieron dejar filas repetidas).
-    const vistos = new Set<string>();
-    const base = (cache as Omit<PrecioCombustible, 'fecha'>[]).filter(r => {
-      const k = `${r.empresa}|${r.tipo}`;
-      if (vistos.has(k)) return false;
-      vistos.add(k);
-      return true;
-    });
-    return { precios: aplicarRegion(base), fuente: 'cache', provincia: provNom, factor };
+    const precios = dedupePorEmpresaTipo(cache as any).map((r: any) => ({ ...r, fecha: hoy }));
+    return { precios, fuente: 'cache', provincia: provNom };
   }
 
-  // 2) fuente viva
-  const base = await fetchBaseNacional();
-  if (base) {
-    const rows = filasDesdeBase(base);
-    await db.from('precio_combustible')
-      .insert(rows.map(r => ({ ...r, fecha: hoy })))
-      .select()
-      .then(() => {}, () => {}); // si falla la escritura (RLS/carrera), devolvemos igual
-    return { precios: aplicarRegion(rows), fuente: 'oficial', provincia: provNom, factor };
+  // 2) descarga + cálculo de todas las provincias
+  if (fetchSiFalta) {
+    const text = await fetchCsv();
+    if (text) {
+      const records = parseCsvVigentes(text);
+      const todas = computarTodas(records, hoy);
+      if (todas.length > 0) {
+        // Reescribe el día completo (evita mezclar con filas viejas/parciales).
+        await db.from('precio_combustible').delete().eq('fecha', hoy);
+        await db.from('precio_combustible').insert(todas).select().then(() => {}, () => {});
+        const rows = todas.filter(r => r.provincia === provNom);
+        if (rows.length > 0) {
+          return { precios: rows.map(({ provincia: _p, ...r }) => r), fuente: 'oficial', provincia: provNom };
+        }
+      }
+    }
   }
 
   // 3) referencia
-  return {
-    precios: aplicarRegion(filasDesdeBase(REFERENCIA_NACIONAL)),
-    fuente: 'referencia',
-    provincia: provNom,
-    factor,
-  };
+  const ref = filasReferencia(provNom).map(({ provincia: _p, ...r }) => ({ ...r, fecha: hoy }));
+  return { precios: ref, fuente: 'referencia', provincia: provNom };
 }

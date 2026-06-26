@@ -9,6 +9,9 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL!;
 const DIAS_AVISO = parseInt(process.env.DIAS_AVISO_VENCIMIENTO || '3');
 
+// El refresco de precios baja el CSV oficial (~9 MB) y calcula todas las provincias.
+export const maxDuration = 60;
+
 function emailUsuarioDemo(empresa: string, diasAviso: number, fechaFormateada: string) {
   return `
     <div style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto; background: #f0ede8; padding: 32px;">
@@ -160,8 +163,8 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
 
-  // Refrescar el precio de gasoil del día (promedio nacional, Sec. de Energía).
-  // Best-effort: si falla, no interrumpe el envío de avisos de vencimiento.
+  // Refrescar el precio de gasoil del día: baja el CSV oficial UNA vez y cachea
+  // todas las provincias. Best-effort: si falla, no interrumpe los avisos.
   let preciosFuente: string | null = null;
   try {
     const { fuente } = await getPreciosDeHoy(admin);

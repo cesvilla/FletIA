@@ -31,8 +31,8 @@ export default async function DashboardPage() {
     supabase.from('recordatorios').select('*').eq('user_id', user.id).eq('completado', false).order('fecha', { ascending: true }),
     // Datos de la suscripción/plan del usuario para el aviso de vencimiento.
     admin.from('accesos').select('fecha_expiracion, tipo, aprobado').eq('user_id', user.id).maybeSingle(),
-    // Precio de gasoil de hoy ajustado a la provincia del cliente (fuente viva + factor regional), cacheado por día.
-    getPreciosDeHoy(admin, user.user_metadata?.provincia as string | undefined).catch(() => ({ precios: [], fuente: 'referencia' as const })),
+    // Precio de gasoil del día por provincia (CSV oficial Sec. de Energía), cacheado. La página lee caché (fetchSiFalta:false).
+    getPreciosDeHoy(admin, user.user_metadata?.provincia as string | undefined, { fetchSiFalta: false }).catch(() => ({ precios: [], fuente: 'referencia' as const })),
   ]);
 
   const gastoMes = viajesMes?.reduce((acc, v) => acc + (v.costo_total || 0), 0) || 0;

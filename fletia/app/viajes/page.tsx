@@ -29,7 +29,9 @@ export default async function ViajesPage() {
   // Precio de gasoil de hoy ajustado a la provincia del cliente (fuente viva +
   // factor regional) para el selector de la calculadora.
   const provincia = user.user_metadata?.provincia as string | undefined;
-  const { precios } = await getPreciosDeHoy(createAdminClient(), provincia)
+  // fetchSiFalta:false → la página no bloquea en la descarga del CSV; lee caché
+  // (la deja caliente el cron diario / la API al cambiar de provincia).
+  const { precios } = await getPreciosDeHoy(createAdminClient(), provincia, { fetchSiFalta: false })
     .catch(() => ({ precios: [] as { empresa: string; tipo: string; precio: number; fecha: string }[] }));
 
   const empresa = user.user_metadata?.empresa || 'Tu empresa';
