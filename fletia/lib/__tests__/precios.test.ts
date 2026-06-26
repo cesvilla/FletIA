@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { mediana, medianaVigente, type RegistroPrecio } from '../precios';
+import {
+  mediana, medianaVigente, parseNumAR, parsePreciosSurtidores, factorRegion,
+  type RegistroPrecio,
+} from '../precios';
 
 describe('mediana', () => {
   it('lista impar: el del medio', () => {
@@ -100,5 +103,44 @@ describe('medianaVigente', () => {
       { idempresa: 'e', precio: '2400', fecha_vigencia: '2026-05-01' },
     ];
     expect(medianaVigente(records, desde)).toBe(2250);
+  });
+});
+
+describe('parseNumAR', () => {
+  it('entero plano', () => expect(parseNumAR('2115')).toBe(2115));
+  it('coma decimal', () => expect(parseNumAR('300,00')).toBe(300));
+  it('punto decimal', () => expect(parseNumAR('168.40')).toBeCloseTo(168.4));
+  it('limpia $ y espacios', () => expect(parseNumAR(' $ 2323 ')).toBe(2323));
+  it('vacío → null', () => expect(parseNumAR('  ')).toBeNull());
+});
+
+describe('factorRegion', () => {
+  it('NOA (Tucumán) ~ +9%', () => expect(factorRegion('Tucumán')).toBeCloseTo(1.09));
+  it('acepta sin acento / mayúsculas', () => expect(factorRegion('SALTA')).toBeCloseTo(1.09));
+  it('Centro = 1.0', () => expect(factorRegion('Buenos Aires')).toBe(1.0));
+  it('sin provincia → asume NOA (base de clientes)', () => expect(factorRegion(null)).toBeCloseTo(1.09));
+  it('provincia desconocida → 1.0', () => expect(factorRegion('Narnia')).toBe(1.0));
+});
+
+describe('parsePreciosSurtidores', () => {
+  const html = `
+    <table>
+      <tr><td>2026</td><td>Enero</td><td>Febrero</td><td>Marzo</td><td>Abril</td><td>Mayo</td><td>Junio</td><td>Julio</td><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
+      <tr><td><strong>Super</strong></td><td>1566</td><td>1609</td><td>1999</td><td>1999</td><td>2037</td><td>2030</td><td> </td><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
+      <tr><td><strong>Gasoil</strong></td><td>1601</td><td>1658</td><td>2065</td><td>2060</td><td>2106</td><td>2115</td><td> </td><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
+      <tr><td><strong>Euro</strong></td><td>1809</td><td>1861</td><td>2271</td><td>2266</td><td>2316</td><td>2323</td><td> </td><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
+    </table>`;
+
+  it('toma el mes pedido (Junio idx 5)', () => {
+    expect(parsePreciosSurtidores(html, 2026, 5)).toEqual({ comun: 2115, premium: 2323 });
+  });
+
+  it('si el mes en curso está vacío, retrocede al último cargado', () => {
+    // Julio (idx 6) está vacío → debe devolver Junio
+    expect(parsePreciosSurtidores(html, 2026, 6)).toEqual({ comun: 2115, premium: 2323 });
+  });
+
+  it('null si no existe la tabla del año', () => {
+    expect(parsePreciosSurtidores(html, 2099, 0)).toBeNull();
   });
 });

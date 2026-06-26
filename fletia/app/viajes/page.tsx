@@ -26,9 +26,10 @@ export default async function ViajesPage() {
     .order('created_at', { ascending: false })
     .limit(10);
 
-  // Precio de gasoil de hoy (promedio nacional real, Sec. de Energía) para el
-  // selector de estación de servicio en la calculadora.
-  const { precios } = await getPreciosDeHoy(createAdminClient())
+  // Precio de gasoil de hoy ajustado a la provincia del cliente (fuente viva +
+  // factor regional) para el selector de la calculadora.
+  const provincia = user.user_metadata?.provincia as string | undefined;
+  const { precios } = await getPreciosDeHoy(createAdminClient(), provincia)
     .catch(() => ({ precios: [] as { empresa: string; tipo: string; precio: number; fecha: string }[] }));
 
   const empresa = user.user_metadata?.empresa || 'Tu empresa';
@@ -40,6 +41,7 @@ export default async function ViajesPage() {
       empresa={empresa}
       email={user.email!}
       precios={precios || []}
+      provincia={provincia}
     />
   );
 }

@@ -65,11 +65,24 @@ interface Props {
   empresa: string;
   email: string;
   precios?: PrecioGasoil[];
+  provincia?: string;
 }
 
-export default function ViajesClient({ camiones, viajesIniciales, empresa, email, precios = [] }: Props) {
+const PROVINCIAS_AR = [
+  'Buenos Aires', 'CABA', 'Catamarca', 'Chaco', 'Chubut', 'Córdoba', 'Corrientes',
+  'Entre Ríos', 'Formosa', 'Jujuy', 'La Pampa', 'La Rioja', 'Mendoza', 'Misiones',
+  'Neuquén', 'Río Negro', 'Salta', 'San Juan', 'San Luis', 'Santa Cruz', 'Santa Fe',
+  'Santiago del Estero', 'Tierra del Fuego', 'Tucumán',
+];
+
+export default function ViajesClient({ camiones, viajesIniciales, empresa, email, precios: preciosIniciales = [], provincia: provinciaInicial }: Props) {
   const router = useRouter();
   const supabase = createClient();
+
+  // Precios de gasoil (estado, para poder re-pedirlos al cambiar de provincia).
+  const [precios, setPrecios] = useState<PrecioGasoil[]>(preciosIniciales);
+  const [provinciaSel, setProvinciaSel] = useState<string>(provinciaInicial || 'Tucumán');
+  const [loadingPrecios, setLoadingPrecios] = useState(false);
 
   const [viajes, setViajes] = useState<Viaje[]>(viajesIniciales);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -154,6 +167,31 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
   // Selector de precio de gasoil por estación de servicio
   const [tipoGasoil, setTipoGasoil] = useState<'Gasoil Común' | 'Gasoil Premium'>('Gasoil Común');
   const [estacionSel, setEstacionSel] = useState<string | null>(null);
+
+  // Cambia la provincia → re-pide el precio regional, actualiza el campo y persiste
+  // la elección en la cuenta (así vale en el dashboard y en el próximo ingreso).
+  async function cambiarProvincia(prov: string) {
+    setProvinciaSel(prov);
+    setLoadingPrecios(true);
+    try {
+      const res = await fetch(`/api/precio-combustible?provincia=${encodeURIComponent(prov)}`);
+      const data = await res.json();
+      if (Array.isArray(data?.precios) && data.precios.length) {
+        setPrecios(data.precios);
+        const comun = data.precios
+          .filter((p: PrecioGasoil) => p.tipo === 'Gasoil Común')
+          .map((p: PrecioGasoil) => p.precio)
+          .sort((a: number, b: number) => a - b);
+        if (comun.length) {
+          setForm(f => ({ ...f, precio_combustible: String(comun[Math.floor(comun.length / 2)]) }));
+          setEstacionSel(null);
+        }
+      }
+      supabase.auth.updateUser({ data: { provincia: prov } }).then(() => {}, () => {});
+    } catch { /* si falla, dejamos los precios actuales */ }
+    setLoadingPrecios(false);
+  }
+
   // Precios del tipo elegido, en orden YPF → Shell → Axion → Puma
   const ordenEstaciones = ['YPF', 'Shell', 'Axion', 'Puma'];
   const preciosDelTipo = precios
@@ -1157,10 +1195,18 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                     {/* Selector de precio de gasoil por estación de servicio (precio del día) */}
                     {preciosDelTipo.length > 0 && (
                       <div style={{ border: '1px solid rgba(26,23,20,0.12)', padding: '10px 12px', backgroundColor: '#f7f5f2' }}>
-                        <div className="flex items-center justify-between" style={{ marginBottom: '8px' }}>
-                          <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                            ⛽ Precio del día — elegí estación
-                          </span>
+                        <div className="flex items-center justify-between" style={{ marginBottom: '8px', gap: '8px' }}>
+                          <div className="flex items-center gap-1.5" style={{ minWidth: 0 }}>
+                            <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '9px', color: '#8a8278', textTransform: 'uppercase', letterSpacing: '1px', whiteSpace: 'nowrap' }}>⛽ Precio en</span>
+                            <select
+                              value={provinciaSel}
+                              onChange={e => cambiarProvincia(e.target.value)}
+                              disabled={loadingPrecios}
+                              style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', fontWeight: 700, color: '#d4440c', background: '#fff', border: '1px solid rgba(26,23,20,0.2)', padding: '2px 4px', cursor: 'pointer', maxWidth: '130px' }}
+                            >
+                              {PROVINCIAS_AR.map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                          </div>
                           <div className="flex gap-1">
                             {(['Gasoil Común', 'Gasoil Premium'] as const).map(t => (
                               <button
@@ -1198,7 +1244,7 @@ export default function ViajesClient({ camiones, viajesIniciales, empresa, email
                           })}
                         </div>
                         <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '8px', color: '#8a8278', marginTop: '7px' }}>
-                          Promedio nacional (Sec. de Energía). Podés ajustar el valor manualmente abajo.
+                          Referencia para {provinciaSel} (precio nacional + ajuste regional). Podés ajustar el valor manualmente abajo.
                         </div>
                       </div>
                     )}

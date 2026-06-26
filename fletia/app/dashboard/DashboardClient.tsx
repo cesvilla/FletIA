@@ -198,13 +198,13 @@ export default function DashboardClient({ email, empresa, userId, gastoMes, gana
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-card border border-ink/10 p-5">
               <div className="flex items-center justify-between mb-1">
-                <div className="font-mono text-[10px] tracking-[3px] text-accent uppercase">⛽ Gasoil hoy — promedio país</div>
+                <div className="font-mono text-[10px] tracking-[3px] text-accent uppercase">⛽ Gasoil hoy — tu región</div>
                 <div className="font-mono text-[9px] text-ink-3">{new Date().toLocaleDateString('es-AR')}</div>
               </div>
               <div className="font-mono text-[9px] text-ink-3 mb-4">
                 {preciosFuente === 'referencia'
                   ? 'Valores de referencia'
-                  : 'Fuente: Secretaría de Energía · promedio nacional'}
+                  : 'Precio nacional + ajuste regional · ajustá tu provincia en la calculadora'}
               </div>
               {precios.length === 0 ? (
                 <div className="text-center py-6">
