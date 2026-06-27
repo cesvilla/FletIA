@@ -50,4 +50,15 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+const { withSentryConfig } = require('@sentry/nextjs');
+
+module.exports = withSentryConfig(nextConfig, {
+  org: 'fletia',
+  project: 'fletia',
+  // Silenciar logs del plugin salvo en CI.
+  silent: !process.env.CI,
+  // Sube source maps del cliente para stack traces legibles (requiere SENTRY_AUTH_TOKEN en build).
+  widenClientFileUpload: true,
+  // Saca el SDK de logs de consola de Sentry del bundle de prod.
+  disableLogger: true,
+});
